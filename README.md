@@ -19,14 +19,6 @@ globally without prompts, add `--global --yes`:
 npx skills add https://github.com/NerdOutInc/ai-skills --skill screen-studio --global --yes
 ```
 
-If this repository is private, make sure your local GitHub credentials can clone
-it before running the install command. With the GitHub CLI, that usually means:
-
-```bash
-gh auth login
-gh auth setup-git
-```
-
 To list the available skills before installing:
 
 ```bash
