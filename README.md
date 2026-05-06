@@ -34,3 +34,10 @@ Screen Studio. It guides capture-scope selection, clean Helium browser setup for
 web demos, scripted dry runs, coordinate calibration with `cliclick`, Screen
 Studio shortcut usage, smoke captures, and keeper-take verification with tools
 such as `ffprobe` and timestamp contact sheets.
+
+The skill ships a tiny self-contained recording status server (a precompiled
+universal macOS binary, zero runtime dependencies). The agent starts it at the
+top of every session and shares a Bonjour URL like
+`http://YourMac.local:8765` (with the LAN IP as a fallback). Open it on a
+phone, tablet, or another computer to watch the live phase, elapsed clock, and
+rolling action log while the recording is in progress.

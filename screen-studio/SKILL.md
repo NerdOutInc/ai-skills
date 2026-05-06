@@ -45,6 +45,127 @@ These requirements are not optional for keeper takes:
   `ffprobe` and a timestamp contact sheet has been inspected.
 - Reject takes that miss required actions or show the wrong state. Do not reject
   a complete take only because it is longer than the audio.
+- Start the status server before any dry runs and share the Bonjour and LAN
+  URLs in chat. See [Recording Status Server](#recording-status-server).
+
+## Recording Status Server
+
+This skill ships a tiny self-contained status server so the user can monitor a
+take live from a phone, tablet, or another computer on the same network.
+
+The server is a precompiled universal macOS binary at:
+
+```text
+screen-studio/server/status-server
+```
+
+It has zero runtime dependencies (no Python, Node, Go, or Homebrew needed).
+
+### Starting the server
+
+Run the binary in the background and bind to all interfaces (the binary already
+binds `0.0.0.0` by default):
+
+```bash
+"$SKILL_DIR/server/status-server" --port 8765 &
+```
+
+`$SKILL_DIR` is the path to this skill's directory. The default port is `8765`;
+pass `--port N` to change it.
+
+When the server starts, it logs three URLs: `0.0.0.0`, the macOS Bonjour
+hostname (e.g. `Brians-Mac-mini.local`), and each detected LAN IPv4. Read those
+lines from the server's stdout and **immediately tell the user** which URL to
+open from another device. Prefer the Bonjour URL because it survives DHCP
+renewals; fall back to the LAN IP if the Bonjour name fails to resolve on the
+user's other device.
+
+Use this exact phrasing in chat (substituting the real values):
+
+> The recording status page is live. From another device on this network, open
+> **http://Brians-Mac-mini.local:8765** (or **http://192.168.68.201:8765** if
+> the `.local` name doesn't resolve).
+
+Detect the values by reading the server's startup log, or query the server:
+
+```bash
+curl -s http://127.0.0.1:8765/api/lan
+# {"bonjour":"Brians-Mac-mini.local","ips":["192.168.68.201"],"port":8765}
+```
+
+If `bonjour` is empty, ask the user for their `.local` name from
+`scutil --get LocalHostName`, or only share the LAN IP URL.
+
+### Pushing status updates
+
+Update status at every meaningful transition. The same binary doubles as a
+client:
+
+```bash
+# Mark prep, set the project name, and clear any stale log:
+"$SKILL_DIR/server/status-server" update \
+  --phase preparing \
+  --project "checkout-demo" \
+  --action "Helium opened to /cart" \
+  --reset-log
+
+# Mark the actual recording start (sets started_at and elapsed clock):
+"$SKILL_DIR/server/status-server" update \
+  --phase recording \
+  --action "Pressed Return to start"
+
+# Append actions during the take:
+"$SKILL_DIR/server/status-server" update --action "Clicked Submit"
+"$SKILL_DIR/server/status-server" update --action "Waiting for upload"
+
+# Mark stop:
+"$SKILL_DIR/server/status-server" update \
+  --phase stopped \
+  --action "Stop hotkey pressed" \
+  --clear-started-at
+
+# Free-form note (e.g. for the user to see from across the room):
+"$SKILL_DIR/server/status-server" update --note "Hands off the keyboard"
+```
+
+Phases: `idle`, `preparing`, `recording`, `stopped`, `error`. The page color
+codes the badge: red pulse for `recording`, amber for `preparing`, green for
+`stopped`, gray for `idle`, red for `error`. The elapsed clock starts when the
+phase first transitions to `recording` and freezes when it leaves `recording`
+or `preparing`.
+
+### When to update during the workflow
+
+- **Before dry runs:** start the server, push `phase=preparing` with the
+  project name. Do not push per-step actions during dry runs unless the user
+  asks; dry-run noise dilutes the keeper-take log.
+- **Hard gates check:** push `action="Hard gates verified"` once gates pass.
+- **Final take start:** push `phase=recording` immediately after pressing
+  `Return` to start Screen Studio. The pulse on the page is the user's
+  confirmation the take actually began.
+- **Each scripted action:** push a one-line description before running each
+  helper command, so the page reflects what the take is currently capturing.
+- **Long waits:** push `action="Waiting for upload (N seconds)"` so the user
+  on the other device understands the apparent pause.
+- **Stop:** push `phase=stopped` immediately after `Command-Control-Return`.
+- **Errors / takes rejected after frame review:** push `phase=error` with a
+  short reason (e.g. `action="Rejected: Codex visible in frame 90"`).
+
+Never block on the update call. If the server is down for any reason, log it
+locally and continue the take — the recording is the source of truth.
+
+### Stopping the server
+
+Leave the server running across multiple takes in a session. Stop it at the
+end of the session with `kill %1` (or whatever job control matches how it was
+started). The state is in-memory only; a restart resets the page to `idle`
+with an empty log.
+
+### Hard gate addition
+
+Announcing the Bonjour / LAN URL is a hard gate: do not start dry runs until
+the URL has been shared in chat. The point of the server is the second screen,
+and the user can't open it if they don't know where to go.
 
 ## Actions File And Audio Prep
 
@@ -326,11 +447,14 @@ During the take:
 
 - Start Screen Studio with the keyboard flow.
 - Wait a short beat.
+- Push `phase=recording` to the status server immediately after pressing
+  `Return`, then push one `--action` line per scripted step.
 - Run the rehearsed helper commands or manual steps when the UI is ready.
 - Wait as long as needed for uploads, processing, search, loading, or responses.
 - Capture every expected action and final state clearly.
 - Wait a short beat at the end.
 - Stop Screen Studio with `Command-Control-Return`.
+- Push `phase=stopped` to the status server right after the stop hotkey.
 
 After stopping:
 
@@ -408,6 +532,9 @@ Keep a compact log while rehearsing and recording:
 
 ## Recovery
 
+- If a take is rejected after frame review, push `phase=error` to the status
+  server with a short reason
+  (`status-server update --phase error --action "Rejected: Codex visible in frame 90"`).
 - If Screen Studio or macOS asks for recording, microphone, camera, or
   accessibility permission, stop and ask the user to grant it.
 - If the wrong display is selected, cancel before recording and reselect the
