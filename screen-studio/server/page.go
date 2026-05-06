@@ -111,8 +111,59 @@ const indexHTML = `<!doctype html>
   ul.log li:first-child { border-top: 0; }
   ul.log time { color: var(--muted); font-variant-numeric: tabular-nums; }
 
-  .lan { font-size: 12px; color: var(--muted); margin-top: 18px; text-align: center; }
-  .lan code { color: var(--text); background: var(--panel-2); padding: 2px 6px; border-radius: 4px; }
+  .note-form { display: flex; flex-direction: column; gap: 10px; }
+  .note-form textarea {
+    width: 100%; min-height: 72px; resize: vertical;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; font: inherit; line-height: 1.4;
+  }
+  .note-form textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .note-form .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+  .note-form .hint { color: var(--muted); font-size: 12px; }
+  .note-form button {
+    padding: 10px 18px; font: inherit; font-weight: 600;
+    background: var(--accent); color: var(--bg); border: 0; border-radius: 8px;
+    cursor: pointer;
+  }
+  .note-form button[disabled] { opacity: 0.5; cursor: not-allowed; }
+  .note-form button:hover:not([disabled]) { filter: brightness(1.1); }
+  .note-form .status { font-size: 12px; color: var(--muted); min-height: 16px; }
+  .note-form .status.ok { color: var(--ok); }
+  .note-form .status.err { color: var(--err); }
+
+  ul.notes { list-style: none; padding: 0; margin: 0; max-height: 280px; overflow: auto; }
+  ul.notes li {
+    padding: 10px 0; border-top: 1px solid var(--border);
+    font-size: 14px;
+  }
+  ul.notes li:first-child { border-top: 0; }
+  ul.notes .note-meta { color: var(--muted); font-size: 12px; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+  ul.notes .note-text { white-space: pre-wrap; word-break: break-word; }
+
+  .reachable { display: flex; flex-direction: column; gap: 14px; align-items: center; }
+  .reachable .qr-wrap {
+    background: #fff; padding: 10px; border-radius: 12px;
+    line-height: 0;
+  }
+  .reachable .qr-wrap img { display: block; width: 200px; height: 200px; }
+  .reachable dl {
+    width: 100%;
+    display: grid; grid-template-columns: auto 1fr; gap: 8px 14px;
+    margin: 0; font-size: 14px; align-items: center;
+  }
+  .reachable dt { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .reachable dd { margin: 0; word-break: break-all; }
+  .reachable .pin {
+    font: 700 22px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: 6px; color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .reachable code {
+    color: var(--text); background: var(--panel-2);
+    padding: 4px 8px; border-radius: 4px;
+    font-size: 13px; word-break: break-all;
+  }
 
   .hidden { display: none !important; }
 </style>
@@ -138,14 +189,72 @@ const indexHTML = `<!doctype html>
 </section>
 
 <section class="card">
+  <h2>Send a note to {{AGENT}}</h2>
+  <form class="note-form" id="note-form">
+    <textarea id="note-text" maxlength="1000" placeholder="Type a note for {{AGENT}}&hellip;"></textarea>
+    <div class="row">
+      <span class="hint">Notes are seen between scripted actions, but answered after the take stops to avoid disrupting the recording.</span>
+      <button type="submit" id="note-send">Send</button>
+    </div>
+    <div class="status" id="note-status"></div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Your sent notes</h2>
+  <ul class="notes" id="notes-list"><li class="empty" style="color:var(--muted)">none yet</li></ul>
+</section>
+
+<section class="card">
   <h2>Recent actions</h2>
   <ul class="log" id="log"><li class="empty"><time></time><span style="color:var(--muted)">none yet</span></li></ul>
 </section>
 
-<div class="lan" id="lan"></div>
+<section class="card">
+  <h2>Open on your phone</h2>
+  <div class="reachable">
+    <div class="qr-wrap"><img src="/api/qr.png" alt="QR code linking to this page"></div>
+    <dl>
+      <dt>PIN</dt>
+      <dd class="pin">{{PIN}}</dd>
+      <dt class="bonjour-dt hidden">Bonjour</dt>
+      <dd class="bonjour-dd hidden"><code id="bonjour-url"></code></dd>
+      <dt class="lan-dt hidden">LAN IP</dt>
+      <dd class="lan-dd hidden"><code id="lan-url"></code></dd>
+    </dl>
+  </div>
+</section>
 
 <script>
 (function() {
+  // --- PIN handoff: if ?pin=... is in the URL, the server sets a cookie
+  // for us. Once that's done, strip it from the URL so it doesn't leak
+  // via screenshots, referrers, or "share this page".
+  (function stripPinFromUrl() {
+    const u = new URL(window.location.href);
+    if (u.searchParams.has("pin")) {
+      u.searchParams.delete("pin");
+      window.history.replaceState({}, "", u.pathname + (u.search || "") + (u.hash || ""));
+    }
+  })();
+
+  // --- Demo notes: ?demo=1 pre-populates sessionStorage with sample notes
+  // for documentation screenshots. No-op once the user actually sends a real
+  // note (sessionStorage is keyed by browser session). Strips ?demo from URL.
+  (function maybeSeedDemo() {
+    const u = new URL(window.location.href);
+    if (!u.searchParams.has("demo")) return;
+    u.searchParams.delete("demo");
+    window.history.replaceState({}, "", u.pathname + (u.search || "") + (u.hash || ""));
+    if (sessionStorage.getItem("ss_notes")) return;
+    const t1 = new Date(Date.now() - 60000).toISOString();
+    const t2 = new Date(Date.now() - 18000).toISOString();
+    sessionStorage.setItem("ss_notes", JSON.stringify([
+      { id: 1, at: t1, offset_ms: 27000, text: "The cursor moved too fast across the search box — could we slow it down for a retake?" },
+      { id: 2, at: t2, offset_ms: 72000, text: "Did the email confirmation toast render before I clicked Next?" }
+    ]));
+  })();
+
   const $  = (id) => document.getElementById(id);
   const fmtClock = (ms) => {
     if (ms < 0 || !isFinite(ms)) return "--:--";
@@ -162,16 +271,29 @@ const indexHTML = `<!doctype html>
     if (isNaN(d)) return "—";
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
   };
+  const fmtOffset = (ms) => {
+    if (ms == null || ms < 0) return "before take";
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return "+" + m + ":" + String(sec).padStart(2, "0") + " into take";
+  };
+  const escapeHTML = (s) => String(s).replace(/[<>&"']/g, (c) => ({
+    "<":"&lt;", ">":"&gt;", "&":"&amp;", '"':"&quot;", "'":"&#39;"
+  }[c]));
 
   let lastStartedAt = null;
   let lastPhase = "idle";
-  let stale = false;
   let consecutiveFails = 0;
+  let myNotes = []; // notes sent from THIS browser session
 
   async function fetchStatus() {
     try {
-      const res = await fetch("/api/status", { cache: "no-store" });
-      if (!res.ok) throw new Error("HTTP " + res.status);
+      const res = await fetch("/api/status", { cache: "no-store", credentials: "same-origin" });
+      if (!res.ok) {
+        if (res.status === 401) { redirectForPin(); return; }
+        throw new Error("HTTP " + res.status);
+      }
       const s = await res.json();
       consecutiveFails = 0;
       setConn(true);
@@ -180,6 +302,13 @@ const indexHTML = `<!doctype html>
       consecutiveFails++;
       if (consecutiveFails >= 2) setConn(false);
     }
+  }
+
+  function redirectForPin() {
+    // Cookie missing/expired. Bounce to the PIN entry page; the server's
+    // 401 already returned that page, but if we got here via a stale
+    // cookie, just reload so the server can render its PIN form.
+    window.location.reload();
   }
 
   function setConn(ok) {
@@ -233,7 +362,7 @@ const indexHTML = `<!doctype html>
     } else {
       ul.innerHTML = log.map((e) => {
         const t = fmtTime(e.at);
-        const txt = (e.action || "").replace(/[<>&]/g, (c) => ({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
+        const txt = escapeHTML(e.action || "");
         return '<li><time>' + t + '</time><span>' + txt + '</span></li>';
       }).join("");
     }
@@ -250,23 +379,93 @@ const indexHTML = `<!doctype html>
 
   async function loadLan() {
     try {
-      const res = await fetch("/api/lan", { cache: "no-store" });
+      const res = await fetch("/api/lan", { cache: "no-store", credentials: "same-origin" });
       if (!res.ok) return;
       const j = await res.json();
-      const ips = j.ips || [];
       const port = j.port;
       const bonjour = j.bonjour || "";
-      const urls = [];
-      if (bonjour) urls.push('<code>http://' + bonjour + ':' + port + '</code>');
-      ips.forEach((ip) => urls.push('<code>http://' + ip + ':' + port + '</code>'));
-      if (!urls.length) {
-        $("lan").innerHTML = "Server reachable on this machine only.";
-        return;
+      const preferred = j.preferred || "";
+      if (bonjour) {
+        $("bonjour-url").textContent = "http://" + bonjour + ":" + port;
+        document.querySelector(".bonjour-dt").classList.remove("hidden");
+        document.querySelector(".bonjour-dd").classList.remove("hidden");
       }
-      $("lan").innerHTML = "Reachable from another device: " + urls.join(" &nbsp; ");
+      if (preferred) {
+        $("lan-url").textContent = "http://" + preferred + ":" + port;
+        document.querySelector(".lan-dt").classList.remove("hidden");
+        document.querySelector(".lan-dd").classList.remove("hidden");
+      }
     } catch (_) { /* ignore */ }
   }
 
+  function renderMyNotes() {
+    const ul = $("notes-list");
+    if (!myNotes.length) {
+      ul.innerHTML = '<li class="empty" style="color:var(--muted)">none yet</li>';
+      return;
+    }
+    ul.innerHTML = myNotes.slice().reverse().map((n) => {
+      const t = fmtTime(n.at);
+      const off = fmtOffset(n.offset_ms);
+      const txt = escapeHTML(n.text);
+      return '<li><div class="note-meta">' + t + ' &middot; ' + off + ' &middot; <span style="color:var(--ok)">queued for {{AGENT}}</span></div><div class="note-text">' + txt + '</div></li>';
+    }).join("");
+  }
+
+  // Hold a per-tab list in sessionStorage so a reload keeps the
+  // "queued" history visible during the take.
+  function loadMyNotes() {
+    try {
+      const raw = sessionStorage.getItem("ss_notes");
+      if (raw) myNotes = JSON.parse(raw) || [];
+    } catch (_) { myNotes = []; }
+    renderMyNotes();
+  }
+  function saveMyNotes() {
+    try { sessionStorage.setItem("ss_notes", JSON.stringify(myNotes)); } catch (_) {}
+  }
+
+  $("note-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const ta = $("note-text");
+    const btn = $("note-send");
+    const status = $("note-status");
+    const text = ta.value.trim();
+    if (!text) return;
+
+    btn.disabled = true;
+    status.className = "status";
+    status.textContent = "Sending…";
+
+    try {
+      const res = await fetch("/api/note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) { redirectForPin(); return; }
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || ("HTTP " + res.status));
+      }
+      const note = await res.json();
+      myNotes.push(note);
+      saveMyNotes();
+      renderMyNotes();
+      ta.value = "";
+      status.className = "status ok";
+      status.textContent = "📨 Queued for {{AGENT}}.";
+    } catch (e) {
+      status.className = "status err";
+      status.textContent = "Failed: " + e.message;
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { if (status.classList.contains("ok")) status.textContent = ""; }, 4000);
+    }
+  });
+
+  loadMyNotes();
   fetchStatus();
   loadLan();
   setInterval(fetchStatus, 1500);

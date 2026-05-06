@@ -35,9 +35,14 @@ web demos, scripted dry runs, coordinate calibration with `cliclick`, Screen
 Studio shortcut usage, smoke captures, and keeper-take verification with tools
 such as `ffprobe` and timestamp contact sheets.
 
+![Screen Studio recording status page on mobile, two views side by side: live recording state with sent notes on the left, recent actions and QR code with PIN on the right](docs/screen-studio-preview.png)
+
 The skill ships a tiny self-contained recording status server (a precompiled
 universal macOS binary, zero runtime dependencies). The agent starts it at the
-top of every session and shares a Bonjour URL like
-`http://YourMac.local:8765` (with the LAN IP as a fallback). Open it on a
-phone, tablet, or another computer to watch the live phase, elapsed clock, and
-rolling action log while the recording is in progress.
+top of every session, generates a fresh 4-digit PIN, and shares both URLs
+(Bonjour + LAN IP) plus an ASCII QR code that encodes the LAN URL with the PIN
+embedded — scan it with a phone camera to open the page in one tap. The page
+shows the live recording phase, elapsed clock, and rolling action log, and lets
+you send timestamped notes ("the cursor moved too fast at 0:42", "did the
+dropdown render before I clicked?") that the agent reads and responds to in
+chat as part of the post-take debrief.

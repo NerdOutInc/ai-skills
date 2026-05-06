@@ -73,28 +73,38 @@ binds `0.0.0.0` by default):
 `$SKILL_DIR` is the path to this skill's directory. The default port is `8765`;
 pass `--port N` to change it.
 
-When the server starts, it logs three URLs: `0.0.0.0`, the macOS Bonjour
-hostname (e.g. `Brians-Mac-mini.local`), and each detected LAN IPv4. Read those
-lines from the server's stdout and **immediately tell the user** which URL to
-open from another device. Prefer the Bonjour URL because it survives DHCP
-renewals; fall back to the LAN IP if the Bonjour name fails to resolve on the
-user's other device.
+On startup the server prints a banner block to stdout containing:
 
-Use this exact phrasing in chat (substituting the real values):
+- A randomly-generated **4-digit PIN** (different every run; required to
+  access the page from a non-localhost device).
+- The Bonjour URL with `?pin=XXXX` embedded (e.g. `http://Brians-Mac-mini.local:8765/?pin=4827`).
+- The LAN IP URL with `?pin=XXXX` embedded.
+- An ASCII QR code that encodes the **LAN IP** URL with the PIN, so a phone
+  camera can open the page in one tap (no `.local` lookup needed).
 
-> The recording status page is live. From another device on this network, open
-> **http://Brians-Mac-mini.local:8765** (or **http://192.168.68.201:8765** if
-> the `.local` name doesn't resolve).
+Capture the banner from the server's stdout and **immediately repeat it
+verbatim in chat**. Do not paraphrase the QR — the user will scan it directly
+from the chat output. Below the banner, add a one-line summary in plain
+English:
 
-Detect the values by reading the server's startup log, or query the server:
+> Recording status page is live. **PIN: 4827.** Scan the QR with your phone
+> camera, or open **http://Brians-Mac-mini.local:8765/?pin=4827** (Bonjour) or
+> **http://192.168.68.201:8765/?pin=4827** (LAN IP) on any device.
+
+The PIN auto-applies on first load via the URL query, then the page stores it
+as a cookie and strips it from the address bar. Localhost requests from the
+agent's own CLI calls (update / status / notes) bypass auth automatically.
+
+Detect the values programmatically when needed:
 
 ```bash
 curl -s http://127.0.0.1:8765/api/lan
-# {"bonjour":"Brians-Mac-mini.local","ips":["192.168.68.201"],"port":8765}
+# {"bonjour":"Brians-Mac-mini.local","ips":["192.168.68.201"],
+#  "preferred":"192.168.68.201","port":8765}
 ```
 
-If `bonjour` is empty, ask the user for their `.local` name from
-`scutil --get LocalHostName`, or only share the LAN IP URL.
+If `preferred` is empty (no usable LAN IPv4), still share the Bonjour URL and
+PIN, but the QR will not be useful from outside the host machine.
 
 ### Pushing status updates
 
@@ -153,6 +163,46 @@ or `preparing`.
 
 Never block on the update call. If the server is down for any reason, log it
 locally and continue the take — the recording is the source of truth.
+
+### Notes from the user
+
+The status page has a "Send a note to Codex" form. The user types observations
+or questions while watching the take from a phone or another device, and each
+note arrives at the server stamped with both wall-clock time and a
+**take-relative offset** (milliseconds since `started_at`). Notes are queued;
+the recording is **not** interrupted to acknowledge them.
+
+How to handle notes:
+
+- **During a take, between scripted actions:** poll for new notes with
+  `status-server notes --since-id <last_seen_id>` and silently log them. **Do
+  not type a chat reply mid-take** — keystrokes can corrupt the recording
+  (focus changes, audible noise, broken cursor scripts). The page already
+  shows the user a "📨 Queued for Codex" receipt; that is the
+  acknowledgement.
+- **After the take stops:** as part of the post-take debrief, run
+  `status-server notes --clear` to fetch all notes from the take in one shot
+  and reset the queue for the next take. Surface every note in chat with:
+  - The note text in a quote.
+  - The take-relative offset formatted as `mm:ss`.
+  - A direct response: answer questions by inspecting the relevant frames in
+    the contact sheet at the matching timestamp; treat feedback as a request
+    that may justify a re-take.
+- **Multiple takes in one session:** notes accumulate across takes if you
+  don't pass `--clear`. Always `--clear` after each take so the next debrief
+  is scoped to its own take.
+
+Sample post-take note debrief in chat:
+
+> You sent two notes during the take:
+>
+> 1. **+0:27** — "The cursor moved too fast across the search box."
+>    Looking at the contact sheet at 0:27, the cursor crosses the search box
+>    in ~150ms. I can drop that to ~400ms by raising the `cliclick -e` value
+>    on the search-box helper. Want me to retake?
+> 2. **+1:12** — "Did the email confirmation render before I clicked Next?"
+>    Yes — at 1:12 the green "Email sent" toast is fully on-screen for
+>    ~600ms before the click on Next. Take is good on that point.
 
 ### Stopping the server
 
@@ -459,6 +509,9 @@ During the take:
 After stopping:
 
 - Restore Codex.
+- Run `status-server notes --clear` and surface every note in chat with its
+  take-relative offset, answering questions and reacting to feedback. See
+  [Notes from the user](#notes-from-the-user).
 - Verify a fresh project exists in `~/Screen Studio Projects`.
 - Verify the display track exists, usually at:
 

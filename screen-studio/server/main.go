@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net"
@@ -151,6 +152,22 @@ func bonjourName() string {
 	return ""
 }
 
+// preferredLANIP returns the most likely-correct LAN IPv4 to print in QR
+// codes and announcements: the first private-range address (10/8, 172.16/12,
+// 192.168/16). Falls back to the first non-private IPv4 if none is private.
+func preferredLANIP(ips []string) string {
+	if len(ips) == 0 {
+		return ""
+	}
+	for _, s := range ips {
+		ip := net.ParseIP(s)
+		if ip != nil && ip.IsPrivate() {
+			return s
+		}
+	}
+	return ips[0]
+}
+
 func lanIPs() []string {
 	out := []string{}
 	ifaces, err := net.Interfaces()
@@ -189,8 +206,27 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func runServer(port int) error {
+func runServer(port int, pinOverride, agentName string) error {
 	st := newStore()
+	ns := newNoteStore()
+
+	pin := strings.TrimSpace(pinOverride)
+	if pin == "" {
+		p, err := generatePIN()
+		if err != nil {
+			return fmt.Errorf("generate pin: %w", err)
+		}
+		pin = p
+	}
+
+	agent := strings.TrimSpace(agentName)
+	if agent == "" {
+		agent = "the agent"
+	}
+	pageBytes := []byte(strings.NewReplacer(
+		"{{AGENT}}", html.EscapeString(agent),
+		"{{PIN}}", html.EscapeString(pin),
+	).Replace(indexHTML))
 
 	mux := http.NewServeMux()
 
@@ -219,11 +255,33 @@ func runServer(port int) error {
 	})
 
 	mux.HandleFunc("/api/lan", func(w http.ResponseWriter, r *http.Request) {
+		ips := lanIPs()
 		writeJSON(w, http.StatusOK, map[string]any{
-			"ips":     lanIPs(),
-			"bonjour": bonjourName(),
-			"port":    port,
+			"ips":       ips,
+			"bonjour":   bonjourName(),
+			"port":      port,
+			"preferred": preferredLANIP(ips),
+			"agent":     agent,
 		})
+	})
+
+	installNoteRoutes(mux, ns, st)
+
+	mux.HandleFunc("/api/qr.png", func(w http.ResponseWriter, r *http.Request) {
+		ips := lanIPs()
+		preferred := preferredLANIP(ips)
+		if preferred == "" {
+			preferred = "127.0.0.1"
+		}
+		url := fmt.Sprintf("http://%s:%d/?pin=%s", preferred, port, pin)
+		png, err := renderQRPNG(url, 320)
+		if err != nil {
+			http.Error(w, "qr error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(png)
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -233,13 +291,13 @@ func runServer(port int) error {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write([]byte(indexHTML))
+		_, _ = w.Write(pageBytes)
 	})
 
 	addr := fmt.Sprintf("0.0.0.0:%d", port)
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           authWrap(pin, mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -248,21 +306,59 @@ func runServer(port int) error {
 		return err
 	}
 
-	ips := lanIPs()
-	bonjour := bonjourName()
-	log.Printf("screen-studio status server listening on http://%s", addr)
-	if bonjour != "" {
-		log.Printf("  Bonjour:  http://%s:%d", bonjour, port)
-	}
-	if len(ips) > 0 {
-		for _, ip := range ips {
-			log.Printf("  LAN IP:   http://%s:%d", ip, port)
-		}
-	} else if bonjour == "" {
-		log.Printf("  no LAN IPv4 or Bonjour name detected; only http://127.0.0.1:%d", port)
-	}
+	announceStartup(port, pin, agent)
 
 	return srv.Serve(ln)
+}
+
+// announceStartup writes the human-facing block: PIN, URLs (with pin
+// embedded), and an ASCII QR for the LAN-IP URL. Goes to stdout without
+// log prefixes so the QR scans correctly.
+func announceStartup(port int, pin, agent string) {
+	ips := lanIPs()
+	bonjour := bonjourName()
+	preferred := preferredLANIP(ips)
+
+	bonjourURL := ""
+	if bonjour != "" {
+		bonjourURL = fmt.Sprintf("http://%s:%d/?pin=%s", bonjour, port, pin)
+	}
+	lanURL := ""
+	if preferred != "" {
+		lanURL = fmt.Sprintf("http://%s:%d/?pin=%s", preferred, port, pin)
+	}
+
+	fmt.Println()
+	fmt.Println("┌──────────────────────────────────────────")
+	fmt.Println("│  Screen Studio recording status server")
+	fmt.Println("├──────────────────────────────────────────")
+	fmt.Printf("│  Agent:    %s\n", agent)
+	fmt.Printf("│  PIN:      %s\n", pin)
+	if bonjourURL != "" {
+		fmt.Printf("│  Bonjour:  %s\n", bonjourURL)
+	}
+	if lanURL != "" {
+		fmt.Printf("│  LAN IP:   %s\n", lanURL)
+	}
+	if bonjourURL == "" && lanURL == "" {
+		fmt.Printf("│  Local:    http://127.0.0.1:%d/?pin=%s\n", port, pin)
+	}
+	fmt.Println("└──────────────────────────────────────────")
+
+	if lanURL != "" {
+		fmt.Println()
+		fmt.Println("Scan from a phone to open (LAN IP, no .local lookup):")
+		fmt.Println()
+		if qr := renderQR(lanURL); qr != "" {
+			fmt.Print(qr)
+		} else {
+			fmt.Println("  (QR rendering failed; use the URL above)")
+		}
+		fmt.Println()
+	}
+
+	log.SetFlags(log.LstdFlags)
+	log.Printf("listening on http://%s", fmt.Sprintf("0.0.0.0:%d", port))
 }
 
 func runUpdate(args []string) error {
@@ -360,13 +456,56 @@ func runStatus(args []string) error {
 	return nil
 }
 
+// runNotes fetches notes from a running server and prints them as JSON.
+// `--since-id N` returns only notes with id > N. `--clear` deletes all
+// notes after fetching them (useful for the post-take debrief flow).
+func runNotes(args []string) error {
+	fs := flag.NewFlagSet("notes", flag.ContinueOnError)
+	host := fs.String("host", "127.0.0.1", "server host")
+	port := fs.Int("port", defaultPort, "server port")
+	sinceID := fs.Int("since-id", 0, "return notes with id strictly greater than this")
+	clear := fs.Bool("clear", false, "after listing, delete all notes from the server")
+	timeout := fs.Duration("timeout", 3*time.Second, "request timeout")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("http://%s:%d/api/notes?since_id=%d", *host, *port, *sinceID)
+	client := &http.Client{Timeout: *timeout}
+	resp, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	rb, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("server returned %s: %s", resp.Status, string(rb))
+	}
+	fmt.Println(string(rb))
+
+	if *clear {
+		req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://%s:%d/api/notes", *host, *port), nil)
+		if err != nil {
+			return err
+		}
+		dresp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		_ = dresp.Body.Close()
+	}
+	return nil
+}
+
 func usage() {
 	fmt.Fprintf(os.Stderr, `screen-studio status server
 
 Usage:
-  status-server [serve] [--port N]      start HTTP server on 0.0.0.0:N (default %d)
-  status-server update [flags]          POST a status update to a running server
-  status-server status [flags]          GET the current status JSON
+  status-server [serve] [--port N] [--pin XXXX] [--agent NAME]
+                                                  start HTTP server (default port %d)
+  status-server update [flags]                    POST a status update to a running server
+  status-server status [flags]                    GET the current status JSON
+  status-server notes  [flags]                    GET pending notes from the page
 
 Update flags:
   --host HOST                server host (default 127.0.0.1)
@@ -374,18 +513,39 @@ Update flags:
   --phase PHASE              idle | preparing | recording | stopped | error
   --project NAME             project name
   --action TEXT              current action (also appended to log)
-  --note TEXT                free-form note
+  --note TEXT                free-form status note (different from page notes)
   --reset-log                clear the action log before applying
   --clear-started-at         clear the recording start time
   --timeout DURATION         request timeout (default 3s)
 
+Notes flags:
+  --since-id N               only return notes with id > N
+  --clear                    delete all notes after listing
+  --host HOST                server host (default 127.0.0.1)
+  --port N                   server port (default %d)
+  --timeout DURATION         request timeout (default 3s)
+
 Examples:
-  status-server                                                # serve
+  status-server                                                # serve, random PIN
   status-server --port 9000                                    # serve on 9000
+  status-server --pin 1234                                     # serve with fixed PIN (dev)
+  status-server --agent Claude                                 # page UI says "Claude" instead of "the agent"
   status-server update --phase recording --action "Started"
   status-server update --action "Clicked Submit"
   status-server update --phase stopped --action "Stopped" --clear-started-at
-`, defaultPort, defaultPort)
+  status-server notes --clear                                  # debrief: read all + clear
+`, defaultPort, defaultPort, defaultPort)
+}
+
+func parseServeFlags(args []string) (port int, pin, agent string, err error) {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	pPort := fs.Int("port", defaultPort, "listen port")
+	pPin := fs.String("pin", "", "override the random 4-digit PIN (4 digits)")
+	pAgent := fs.String("agent", "", "agent name shown in the page UI (e.g. Codex, Claude). Default: \"the agent\"")
+	if err := fs.Parse(args); err != nil {
+		return 0, "", "", err
+	}
+	return *pPort, *pPin, *pAgent, nil
 }
 
 func main() {
@@ -393,7 +553,7 @@ func main() {
 
 	args := os.Args[1:]
 	if len(args) == 0 {
-		if err := runServer(defaultPort); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := runServer(defaultPort, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
 		return
@@ -401,12 +561,11 @@ func main() {
 
 	switch args[0] {
 	case "serve":
-		fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-		port := fs.Int("port", defaultPort, "listen port")
-		if err := fs.Parse(args[1:]); err != nil {
+		port, pin, agent, err := parseServeFlags(args[1:])
+		if err != nil {
 			os.Exit(2)
 		}
-		if err := runServer(*port); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := runServer(port, pin, agent); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
 	case "update":
@@ -419,17 +578,21 @@ func main() {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)
 		}
+	case "notes":
+		if err := runNotes(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
 	case "-h", "--help", "help":
 		usage()
 	default:
-		// Allow `status-server --port 9000` shorthand for serve
+		// Allow `status-server --port 9000 --pin 1234 --agent Claude` shorthand for serve.
 		if strings.HasPrefix(args[0], "-") {
-			fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-			port := fs.Int("port", defaultPort, "listen port")
-			if err := fs.Parse(args); err != nil {
+			port, pin, agent, err := parseServeFlags(args)
+			if err != nil {
 				os.Exit(2)
 			}
-			if err := runServer(*port); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := runServer(port, pin, agent); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				log.Fatal(err)
 			}
 			return
