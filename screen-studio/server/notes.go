@@ -14,12 +14,16 @@ const maxNotes = 200
 
 // Note is a free-form message sent from the web page to the agent.
 // OffsetMs is milliseconds since the recording's started_at, or -1 when
-// no take was active when the note arrived.
+// no take was active when the note arrived. ConsumedAt is set when the
+// agent acknowledges the note via POST /api/notes/consumed (or the
+// CLI's `notes --clear`); the note itself is preserved so the page can
+// show that the agent has seen it.
 type Note struct {
-	ID       int       `json:"id"`
-	At       time.Time `json:"at"`
-	OffsetMs int64     `json:"offset_ms"`
-	Text     string    `json:"text"`
+	ID         int        `json:"id"`
+	At         time.Time  `json:"at"`
+	OffsetMs   int64      `json:"offset_ms"`
+	Text       string     `json:"text"`
+	ConsumedAt *time.Time `json:"consumed_at,omitempty"`
 }
 
 type noteStore struct {
@@ -59,17 +63,39 @@ func (ns *noteStore) add(text string, takeStart *time.Time) Note {
 	return n
 }
 
-// list returns notes with id strictly greater than sinceID.
-func (ns *noteStore) list(sinceID int) []Note {
+// list returns notes with id strictly greater than sinceID. When
+// includeConsumed is false, only notes without a consumed_at are returned.
+func (ns *noteStore) list(sinceID int, includeConsumed bool) []Note {
 	ns.mu.RLock()
 	defer ns.mu.RUnlock()
 	out := make([]Note, 0, len(ns.items))
 	for _, n := range ns.items {
-		if n.ID > sinceID {
-			out = append(out, n)
+		if n.ID <= sinceID {
+			continue
 		}
+		if !includeConsumed && n.ConsumedAt != nil {
+			continue
+		}
+		out = append(out, n)
 	}
 	return out
+}
+
+// markAllConsumed stamps ConsumedAt on every currently-unconsumed note.
+// Returns the count of notes that were newly marked.
+func (ns *noteStore) markAllConsumed() int {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
+	now := time.Now()
+	count := 0
+	for i := range ns.items {
+		if ns.items[i].ConsumedAt == nil {
+			t := now
+			ns.items[i].ConsumedAt = &t
+			count++
+		}
+	}
+	return count
 }
 
 func (ns *noteStore) clear() {
@@ -78,9 +104,9 @@ func (ns *noteStore) clear() {
 	ns.items = ns.items[:0]
 }
 
-// installNoteRoutes wires /api/note (POST) and /api/notes (GET) onto mux.
-// The take-start lookup is supplied by the status store so notes can be
-// stamped with a recording-relative offset.
+// installNoteRoutes wires the notes endpoints onto mux. The take-start
+// lookup is supplied by the status store so notes can be stamped with a
+// recording-relative offset.
 func installNoteRoutes(mux *http.ServeMux, ns *noteStore, st *store) {
 	mux.HandleFunc("/api/note", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -133,7 +159,15 @@ func installNoteRoutes(mux *http.ServeMux, ns *noteStore, st *store) {
 					sinceID = n
 				}
 			}
-			items := ns.list(sinceID)
+			// includeConsumed defaults to true so the page can display
+			// "seen by agent" status. The agent's CLI passes ?status=open
+			// (or includes it explicitly) to filter to unconsumed only.
+			includeConsumed := true
+			switch strings.ToLower(r.URL.Query().Get("status")) {
+			case "open", "unconsumed", "queued":
+				includeConsumed = false
+			}
+			items := ns.list(sinceID, includeConsumed)
 			writeJSON(w, http.StatusOK, map[string]any{
 				"notes": items,
 				"count": len(items),
@@ -145,5 +179,15 @@ func installNoteRoutes(mux *http.ServeMux, ns *noteStore, st *store) {
 			w.Header().Set("Allow", "GET, DELETE")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	})
+
+	mux.HandleFunc("/api/notes/consumed", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		count := ns.markAllConsumed()
+		writeJSON(w, http.StatusOK, map[string]any{"consumed": count})
 	})
 }

@@ -286,6 +286,7 @@ const indexHTML = `<!doctype html>
   let lastPhase = "idle";
   let consecutiveFails = 0;
   let myNotes = []; // notes sent from THIS browser session
+  let consumedById = {}; // id -> consumed_at (ISO string), populated from server polls
 
   async function fetchStatus() {
     try {
@@ -408,8 +409,35 @@ const indexHTML = `<!doctype html>
       const t = fmtTime(n.at);
       const off = fmtOffset(n.offset_ms);
       const txt = escapeHTML(n.text);
-      return '<li><div class="note-meta">' + t + ' &middot; ' + off + ' &middot; <span style="color:var(--ok)">queued for {{AGENT}}</span></div><div class="note-text">' + txt + '</div></li>';
+      const consumedAt = consumedById[n.id];
+      let badge;
+      if (consumedAt) {
+        badge = '<span style="color:var(--accent)">&check; seen by {{AGENT}} at ' + fmtTime(consumedAt) + '</span>';
+      } else {
+        badge = '<span style="color:var(--ok)">queued for {{AGENT}}</span>';
+      }
+      return '<li><div class="note-meta">' + t + ' &middot; ' + off + ' &middot; ' + badge + '</div><div class="note-text">' + txt + '</div></li>';
     }).join("");
+  }
+
+  // Poll the server for the consumed status of all notes we've sent.
+  async function refreshNoteStatus() {
+    if (!myNotes.length) return;
+    try {
+      const res = await fetch("/api/notes?status=all", { cache: "no-store", credentials: "same-origin" });
+      if (!res.ok) return;
+      const j = await res.json();
+      let changed = false;
+      (j.notes || []).forEach((sn) => {
+        const prev = consumedById[sn.id];
+        const next = sn.consumed_at || null;
+        if (prev !== next) {
+          consumedById[sn.id] = next;
+          changed = true;
+        }
+      });
+      if (changed) renderMyNotes();
+    } catch (_) { /* ignore */ }
   }
 
   // Hold a per-tab list in sessionStorage so a reload keeps the
@@ -468,8 +496,10 @@ const indexHTML = `<!doctype html>
   loadMyNotes();
   fetchStatus();
   loadLan();
+  refreshNoteStatus();
   setInterval(fetchStatus, 1500);
   setInterval(updateElapsed, 250);
+  setInterval(refreshNoteStatus, 3000);
 })();
 </script>
 

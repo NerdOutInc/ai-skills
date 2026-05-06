@@ -79,17 +79,27 @@ On startup the server prints a banner block to stdout containing:
   access the page from a non-localhost device).
 - The Bonjour URL with `?pin=XXXX` embedded (e.g. `http://Brians-Mac-mini.local:8765/?pin=4827`).
 - The LAN IP URL with `?pin=XXXX` embedded.
-- An ASCII QR code that encodes the **LAN IP** URL with the PIN, so a phone
-  camera can open the page in one tap (no `.local` lookup needed).
+- A **QR PNG file path** (e.g. `/var/folders/.../T/screen-studio-status-qr.png`)
+  written to disk at startup so chat clients can render a real PNG.
+- An ASCII QR code (terminal use only — see the next paragraph).
 
-Capture the banner from the server's stdout and **immediately repeat it
-verbatim in chat**. Do not paraphrase the QR — the user will scan it directly
-from the chat output. Below the banner, add a one-line summary in plain
-English:
+**Sharing the page in chat:**
 
-> Recording status page is live. **PIN: 4827.** Scan the QR with your phone
-> camera, or open **http://Brians-Mac-mini.local:8765/?pin=4827** (Bonjour) or
-> **http://192.168.68.201:8765/?pin=4827** (LAN IP) on any device.
+1. Read the banner from the server's stdout.
+2. Reply with the URLs and PIN, then embed the QR PNG using a markdown image
+   link pointing at the file path from the banner. Example:
+
+   ```markdown
+   Recording status page is live. **PIN: 4827.**
+   - Scan: ![Screen Studio QR](/var/folders/xx/T/screen-studio-status-qr.png)
+   - Bonjour: http://Brians-Mac-mini.local:8765/?pin=4827
+   - LAN IP:  http://192.168.68.201:8765/?pin=4827
+   ```
+
+3. **Do NOT try to repeat the ASCII QR from the banner in chat.** Most chat
+   clients use a different font and line width than the terminal, so the
+   blocks rearrange and the code stops scanning. Always embed the PNG file
+   from the banner instead.
 
 The PIN auto-applies on first load via the URL query, then the page stores it
 as a cookie and strips it from the address bar. Localhost requests from the
@@ -99,8 +109,8 @@ Detect the values programmatically when needed:
 
 ```bash
 curl -s http://127.0.0.1:8765/api/lan
-# {"bonjour":"Brians-Mac-mini.local","ips":["192.168.68.201"],
-#  "preferred":"192.168.68.201","port":8765}
+# {"agent":"Codex","bonjour":"Brians-Mac-mini.local",
+#  "ips":["192.168.68.201"],"preferred":"192.168.68.201","port":8765}
 ```
 
 If `preferred` is empty (no usable LAN IPv4), still share the Bonjour URL and
@@ -146,15 +156,46 @@ or `preparing`.
 
 ### When to update during the workflow
 
-- **Before dry runs:** start the server, push `phase=preparing` with the
-  project name. Do not push per-step actions during dry runs unless the user
-  asks; dry-run noise dilutes the keeper-take log.
+The user is watching the page from another device. **Silence on the page reads
+as "stalled" or "broken"**, even when the agent is busy thinking. Push action
+updates often enough that the page never goes more than ~30 seconds without a
+new line during active work. The exception is the final take itself, where
+updates correspond to scripted steps (one update per step, no thinking-out-loud
+narration that doesn't match a visible event).
+
+- **Server start:** push `phase=preparing` with the project name. Push
+  `action="Reset stale state"` or similar so the first line on the page
+  isn't the placeholder.
+- **During dry runs and discovery — push frequently.** This is investigative
+  work; the user benefits from seeing what you're poking at. Aim for an
+  update every meaningful step: each app you activate, each coordinate you
+  measure, each helper you build, each thing you click to verify. Use
+  present-continuous descriptions in the `--action` text so the page reads
+  like a live status feed, e.g.:
+
+  ```bash
+  status-server update --action "Locating Document link in left nav"
+  status-server update --action "Reading window origin via osascript"
+  status-server update --action "Confirming button coordinates with cliclick"
+  status-server update --action "Discovering how to upload document"
+  status-server update --action "Drafting smooth-scroll helper"
+  status-server update --action "Verifying Helium session is logged in"
+  status-server update --action "Dismissing first-time prompt"
+  ```
+
+  Don't narrate every individual thought — group small steps into the action
+  they belong to. A good rhythm is one update per investigation finding, app
+  switch, coordinate set, or helper script written. If the agent has been
+  silent on the page for 30+ seconds and is still working, push something.
+
 - **Hard gates check:** push `action="Hard gates verified"` once gates pass.
 - **Final take start:** push `phase=recording` immediately after pressing
   `Return` to start Screen Studio. The pulse on the page is the user's
   confirmation the take actually began.
-- **Each scripted action:** push a one-line description before running each
-  helper command, so the page reflects what the take is currently capturing.
+- **Each scripted action during the take:** push one update per scripted
+  helper command — that's it. The take itself should NOT have the same
+  density of updates as dry runs; one entry per visible on-camera step
+  keeps the keeper-take log clean for the post-take debrief.
 - **Long waits:** push `action="Waiting for upload (N seconds)"` so the user
   on the other device understands the apparent pause.
 - **Stop:** push `phase=stopped` immediately after `Command-Control-Return`.
@@ -166,31 +207,60 @@ locally and continue the take — the recording is the source of truth.
 
 ### Notes from the user
 
-The status page has a "Send a note to Codex" form. The user types observations
-or questions while watching the take from a phone or another device, and each
-note arrives at the server stamped with both wall-clock time and a
-**take-relative offset** (milliseconds since `started_at`). Notes are queued;
-the recording is **not** interrupted to acknowledge them.
+The status page has a "Send a note to {{Agent}}" form. The user types
+observations or questions while watching the take from a phone or another
+device, and each note arrives at the server stamped with both wall-clock time
+and a **take-relative offset** (milliseconds since `started_at`). Notes are
+queued; the recording is **not** interrupted to acknowledge them.
 
-How to handle notes:
+Each note has two server-tracked states:
 
-- **During a take, between scripted actions:** poll for new notes with
-  `status-server notes --since-id <last_seen_id>` and silently log them. **Do
-  not type a chat reply mid-take** — keystrokes can corrupt the recording
-  (focus changes, audible noise, broken cursor scripts). The page already
-  shows the user a "📨 Queued for Codex" receipt; that is the
-  acknowledgement.
-- **After the take stops:** as part of the post-take debrief, run
-  `status-server notes --clear` to fetch all notes from the take in one shot
-  and reset the queue for the next take. Surface every note in chat with:
+- **queued** — user sent it, agent has not acknowledged it yet. Page shows
+  a green "queued for {{Agent}}" badge.
+- **consumed** (a.k.a. seen) — agent has fetched it and confirmed it. Page
+  shows a blue ✓ "seen by {{Agent}}" badge with the timestamp.
+
+The CLI verb that flips queued → consumed is `notes --clear` — despite the
+name, this **does not delete** the notes; it just stamps `consumed_at` so
+the page can keep showing the user that {{Agent}} has seen them. Use
+`notes --purge` only when you want to truly wipe history. The default
+`notes` (no flags) lists only queued notes; pass `--all` to include
+already-consumed ones.
+
+**When to poll for notes:**
+
+The agent must check for queued notes — and surface them in chat — at every
+natural pause in the workflow. Polling at these points reassures the user
+that their input was received, and gives the agent a chance to act on
+feedback before doing more work.
+
+- **Between dry runs.** Before starting dry run N+1, run
+  `status-server notes --clear`, surface any new notes in chat, and decide
+  whether they affect the rehearsal plan (e.g. "you forgot to hide Codex" →
+  fix the window setup before the next dry run).
+- **Between attempted recordings.** After a take is stopped (whether kept,
+  rejected, or aborted) and before starting the next take, run
+  `status-server notes --clear` and address each note. A common case: the
+  user noticed a problem during the take that you should fix before the next
+  attempt.
+- **During a take, between scripted actions.** Poll with
+  `status-server notes --since-id <last_seen_id>` (no `--clear`) and silently
+  log them. **Do not type a chat reply mid-take** — keystrokes can corrupt
+  the recording (focus changes, audible noise, broken cursor scripts). The
+  page already shows the user a "📨 Queued for {{Agent}}" receipt; that is
+  the acknowledgement.
+- **Post-take debrief.** Run `status-server notes --clear --all`. The
+  `--all` includes notes already consumed earlier in the take cycle so the
+  debrief covers the whole take. Surface every note with:
   - The note text in a quote.
   - The take-relative offset formatted as `mm:ss`.
   - A direct response: answer questions by inspecting the relevant frames in
     the contact sheet at the matching timestamp; treat feedback as a request
     that may justify a re-take.
-- **Multiple takes in one session:** notes accumulate across takes if you
-  don't pass `--clear`. Always `--clear` after each take so the next debrief
-  is scoped to its own take.
+
+Always `--clear` (mark consumed) when surfacing notes in chat — that flips
+the page badge from "queued" to "seen", letting the user know {{Agent}} got
+them.
 
 Sample post-take note debrief in chat:
 
@@ -402,13 +472,24 @@ Validate the scroll during dry runs.
 - If wheel events are unreliable, use repeated arrow-key events.
 - Return the list to a useful position before the next scripted click.
 
+**Pace.** Scrolls should feel like a person reading, not a machine skimming.
+Aim for a single down-burst that lasts roughly **1.2–1.6 seconds** (long enough
+that a viewer can register what's on screen as it passes), with at least
+**0.4–0.6 seconds** of pause at the bottom before scrolling back. Avoid many
+short, quick bursts — one slower, longer burst reads as deliberate; several
+quick bursts read as nervous or stalled.
+
+The helper defaults below produce ~1.4s down-bursts; tune `delay` (per-key
+pause) up rather than adding more bursts if a take feels rushed.
+
 Reusable helper:
 
 ```bash
 smooth_scroll_down_and_back() {
-  local down_steps="${1:-24}"
-  local up_steps="${2:-18}"
-  local delay="${3:-0.025}"
+  local down_steps="${1:-32}"
+  local up_steps="${2:-24}"
+  local delay="${3:-0.045}"
+  local pause="${4:-0.45}"
 
   osascript <<APPLESCRIPT
 tell application "System Events"
@@ -416,7 +497,7 @@ tell application "System Events"
     key code 125
     delay ${delay}
   end repeat
-  delay 0.30
+  delay ${pause}
   repeat ${up_steps} times
     key code 126
     delay ${delay}
@@ -431,8 +512,11 @@ Example:
 ```bash
 cliclick -e 300 m:1200,390 c:.
 sleep 0.2
-smooth_scroll_down_and_back 18 18 0.025
+smooth_scroll_down_and_back 32 24 0.045 0.45
 ```
+
+For a slower, more documentary pace (e.g. for a long settings page where
+the user needs to read each row), try `smooth_scroll_down_and_back 40 30 0.06 0.6`.
 
 If scrolling opens a document, changes filters, summons macOS UI, or does not
 move the intended list, fix the focus target and repeat the dry run.

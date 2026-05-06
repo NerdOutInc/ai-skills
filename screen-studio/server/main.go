@@ -306,15 +306,39 @@ func runServer(port int, pinOverride, agentName string) error {
 		return err
 	}
 
-	announceStartup(port, pin, agent)
+	qrPath := writeStartupQR(port, pin)
+	announceStartup(port, pin, agent, qrPath)
 
 	return srv.Serve(ln)
 }
 
+// writeStartupQR renders the LAN-IP-with-PIN URL as a PNG and writes it to
+// a stable temp path so chat agents can embed it via a markdown image link
+// without making an HTTP request. Returns the file path on success, "" on
+// any failure.
+func writeStartupQR(port int, pin string) string {
+	ips := lanIPs()
+	preferred := preferredLANIP(ips)
+	if preferred == "" {
+		preferred = "127.0.0.1"
+	}
+	url := fmt.Sprintf("http://%s:%d/?pin=%s", preferred, port, pin)
+	png, err := renderQRPNG(url, 480)
+	if err != nil {
+		return ""
+	}
+	path := fmt.Sprintf("%s/screen-studio-status-qr.png", os.TempDir())
+	if err := os.WriteFile(path, png, 0o644); err != nil {
+		return ""
+	}
+	return path
+}
+
 // announceStartup writes the human-facing block: PIN, URLs (with pin
-// embedded), and an ASCII QR for the LAN-IP URL. Goes to stdout without
-// log prefixes so the QR scans correctly.
-func announceStartup(port int, pin, agent string) {
+// embedded), QR PNG file path (for chat embeds), and an ASCII QR fallback.
+// Goes to stdout without log prefixes so the ASCII QR scans correctly when
+// terminal users want to use it directly.
+func announceStartup(port int, pin, agent, qrPath string) {
 	ips := lanIPs()
 	bonjour := bonjourName()
 	preferred := preferredLANIP(ips)
@@ -343,11 +367,14 @@ func announceStartup(port int, pin, agent string) {
 	if bonjourURL == "" && lanURL == "" {
 		fmt.Printf("│  Local:    http://127.0.0.1:%d/?pin=%s\n", port, pin)
 	}
+	if qrPath != "" {
+		fmt.Printf("│  QR PNG:   %s\n", qrPath)
+	}
 	fmt.Println("└──────────────────────────────────────────")
 
 	if lanURL != "" {
 		fmt.Println()
-		fmt.Println("Scan from a phone to open (LAN IP, no .local lookup):")
+		fmt.Println("ASCII QR (terminal use only — chat agents should embed the QR PNG):")
 		fmt.Println()
 		if qr := renderQR(lanURL); qr != "" {
 			fmt.Print(qr)
@@ -457,20 +484,35 @@ func runStatus(args []string) error {
 }
 
 // runNotes fetches notes from a running server and prints them as JSON.
-// `--since-id N` returns only notes with id > N. `--clear` deletes all
-// notes after fetching them (useful for the post-take debrief flow).
+//
+//	--since-id N   return notes with id strictly greater than N
+//	--all          include notes the agent has already marked consumed
+//	--clear        after listing, mark all returned notes as consumed
+//	               (preserves them on the server so the page can display
+//	               "seen by agent" — does NOT delete)
+//	--purge        after listing, hard-delete all notes from the server
+//	               (use only when starting a totally fresh session)
 func runNotes(args []string) error {
 	fs := flag.NewFlagSet("notes", flag.ContinueOnError)
 	host := fs.String("host", "127.0.0.1", "server host")
 	port := fs.Int("port", defaultPort, "server port")
 	sinceID := fs.Int("since-id", 0, "return notes with id strictly greater than this")
-	clear := fs.Bool("clear", false, "after listing, delete all notes from the server")
+	all := fs.Bool("all", false, "include already-consumed notes in the listing")
+	clear := fs.Bool("clear", false, "after listing, mark all notes as seen (POST /api/notes/consumed)")
+	purge := fs.Bool("purge", false, "after listing, hard-delete all notes from the server")
 	timeout := fs.Duration("timeout", 3*time.Second, "request timeout")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	url := fmt.Sprintf("http://%s:%d/api/notes?since_id=%d", *host, *port, *sinceID)
+	statusQ := "open"
+	if *all || *clear || *purge {
+		// When the agent is about to consume/delete, show what it's
+		// taking (consumed history included) so the chat output is
+		// the full picture.
+		statusQ = "all"
+	}
+	url := fmt.Sprintf("http://%s:%d/api/notes?since_id=%d&status=%s", *host, *port, *sinceID, statusQ)
 	client := &http.Client{Timeout: *timeout}
 	resp, err := client.Get(url)
 	if err != nil {
@@ -484,7 +526,20 @@ func runNotes(args []string) error {
 	fmt.Println(string(rb))
 
 	if *clear {
-		req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://%s:%d/api/notes", *host, *port), nil)
+		req, err := http.NewRequest(http.MethodPost,
+			fmt.Sprintf("http://%s:%d/api/notes/consumed", *host, *port), nil)
+		if err != nil {
+			return err
+		}
+		dresp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		_ = dresp.Body.Close()
+	}
+	if *purge {
+		req, err := http.NewRequest(http.MethodDelete,
+			fmt.Sprintf("http://%s:%d/api/notes", *host, *port), nil)
 		if err != nil {
 			return err
 		}
@@ -520,7 +575,10 @@ Update flags:
 
 Notes flags:
   --since-id N               only return notes with id > N
-  --clear                    delete all notes after listing
+  --all                      include already-consumed notes in the listing
+  --clear                    after listing, mark all as seen (default for debriefs;
+                             preserves notes on server so the page shows "seen")
+  --purge                    after listing, hard-delete all notes (use sparingly)
   --host HOST                server host (default 127.0.0.1)
   --port N                   server port (default %d)
   --timeout DURATION         request timeout (default 3s)
