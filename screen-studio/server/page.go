@@ -213,7 +213,7 @@ const indexHTML = `<!doctype html>
 <section class="card">
   <h2>Open on your phone</h2>
   <div class="reachable">
-    <div class="qr-wrap"><img src="/api/qr.png" alt="QR code linking to this page"></div>
+    <div class="qr-wrap"><img src="/api/qr.png?v={{PIN}}" alt="QR code linking to this page"></div>
     <dl>
       <dt>PIN</dt>
       <dd class="pin">{{PIN}}</dd>

@@ -38,17 +38,17 @@ func isLocalhost(r *http.Request) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// presentedPIN reads the PIN from cookie, query string, or header.
-// Cookie takes precedence so manual ?pin=... links don't get logged in
-// referrers after the first hit.
+// presentedPIN reads the PIN from query string, cookie, or header.
+// Query string takes precedence so a fresh ?pin=... link can recover from
+// a stale cookie left behind by a previous server run.
 func presentedPIN(r *http.Request) string {
+	if v := strings.TrimSpace(r.URL.Query().Get(pinQueryName)); v != "" {
+		return v
+	}
 	if c, err := r.Cookie(pinCookieName); err == nil {
 		if v := strings.TrimSpace(c.Value); v != "" {
 			return v
 		}
-	}
-	if v := strings.TrimSpace(r.URL.Query().Get(pinQueryName)); v != "" {
-		return v
 	}
 	return strings.TrimSpace(r.Header.Get(pinHeaderName))
 }
@@ -64,11 +64,12 @@ func authWrap(pin string, next http.Handler) http.Handler {
 			return
 		}
 
+		queryPIN := strings.TrimSpace(r.URL.Query().Get(pinQueryName))
 		got := presentedPIN(r)
 		if got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(pin)) == 1 {
 			// If the PIN arrived via query, persist it as a cookie so
 			// future requests don't have to carry it in the URL.
-			if r.URL.Query().Get(pinQueryName) != "" {
+			if queryPIN != "" {
 				http.SetCookie(w, &http.Cookie{
 					Name:     pinCookieName,
 					Value:    pin,
@@ -83,6 +84,18 @@ func authWrap(pin string, next http.Handler) http.Handler {
 		}
 
 		time.Sleep(250 * time.Millisecond)
+
+		if queryPIN != "" {
+			http.SetCookie(w, &http.Cookie{
+				Name:     pinCookieName,
+				Value:    "",
+				Path:     "/",
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+				MaxAge:   -1,
+				Expires:  time.Unix(0, 0),
+			})
+		}
 
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Content-Type", "application/json")

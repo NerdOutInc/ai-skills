@@ -79,8 +79,10 @@ On startup the server prints a banner block to stdout containing:
   access the page from a non-localhost device).
 - The Bonjour URL with `?pin=XXXX` embedded (e.g. `http://Brians-Mac-mini.local:8765/?pin=4827`).
 - The LAN IP URL with `?pin=XXXX` embedded.
-- A **QR PNG file path** (e.g. `/var/folders/.../T/screen-studio-status-qr.png`)
-  written to disk at startup so chat clients can render a real PNG.
+- A **unique QR PNG file path** (e.g.
+  `/var/folders/.../T/screen-studio-status-qr-8765-4827-*.png`) written to disk
+  at startup so chat clients can render a real PNG. The path changes on every
+  server start; always use the newest banner's path.
 - An ASCII QR code (terminal use only — see the next paragraph).
 
 **Sharing the page in chat:**
@@ -91,12 +93,14 @@ On startup the server prints a banner block to stdout containing:
 
    ```markdown
    Recording status page is live. **PIN: 4827.**
-   - Scan: ![Screen Studio QR](/var/folders/xx/T/screen-studio-status-qr.png)
+   - Scan: ![Screen Studio QR](/var/folders/xx/T/screen-studio-status-qr-8765-4827-abc.png)
    - Bonjour: http://Brians-Mac-mini.local:8765/?pin=4827
    - LAN IP:  http://192.168.68.201:8765/?pin=4827
    ```
 
-3. **Do NOT try to repeat the ASCII QR from the banner in chat.** Most chat
+3. **Do NOT reuse a QR PNG path from a previous server run.** The PIN changes
+   on restart, and a stale QR image sends the user to an old `?pin=` URL.
+4. **Do NOT try to repeat the ASCII QR from the banner in chat.** Most chat
    clients use a different font and line width than the terminal, so the
    blocks rearrange and the code stops scanning. Always embed the PNG file
    from the banner instead.
@@ -104,6 +108,8 @@ On startup the server prints a banner block to stdout containing:
 The PIN auto-applies on first load via the URL query, then the page stores it
 as a cookie and strips it from the address bar. Localhost requests from the
 agent's own CLI calls (update / status / notes) bypass auth automatically.
+If the server restarts with a new PIN, the fresh `?pin=...` link replaces any
+stale `ss_pin` cookie from an older run.
 
 Detect the values programmatically when needed:
 
@@ -443,6 +449,37 @@ Keeper takes should move the actual macOS pointer at a human pace.
   display coordinates before calling `cliclick`. Retina screenshots are usually
   physical pixels; `cliclick` uses logical points. On a 2x Retina display,
   divide screenshot coordinates by 2.
+- For text targets visible in a screenshot, use Apple Vision instead of
+  eyeballing coordinates. The helper script prints the recognized screenshot
+  pixel bounds and the converted `cliclick` coordinate:
+
+  ```bash
+  screencapture -x /tmp/screen.png
+  "$SKILL_DIR/scripts/vision-find-text.swift" /tmp/screen.png "Workflows"
+  ```
+
+  Example output:
+
+  ```text
+  text        screenshot_x  screenshot_y  screenshot_w  screenshot_h  center_x  center_y  cliclick_x  cliclick_y  confidence
+  Workflows   448           1213          149           26            523       1226      261         613         1.000
+  ```
+
+  Click the `cliclick_x,cliclick_y` value, then take another screenshot to
+  verify the expected UI state.
+- Apple Vision finds visible text, not arbitrary UI structure:
+  - For links, sidebar items, menu items, buttons with text, labels, and
+    placeholder text, use Apple Vision directly on the visible text.
+  - For a text input with a visible label but no placeholder, find the label
+    text with Apple Vision, then click the input area next to or below that
+    label. Verify focus with a screenshot before typing.
+  - For a text input with no visible label and no placeholder, Apple Vision
+    cannot identify the input by itself. Use a live pointer read, accessibility
+    metadata, or screenshot geometry, then verify focus with a screenshot.
+  - For icon-only buttons without visible text or accessible labels, Apple
+    Vision cannot identify the button semantically. Use nearby text as an
+    anchor if available, otherwise use a live pointer read, accessibility
+    metadata, or screenshot geometry. Always verify the click with a screenshot.
 - Only use window-relative math as a rare fallback when the target point was
   intentionally measured relative to a window, or when coordinates must survive
   the window moving. In that case, document both the window origin and the
@@ -481,8 +518,10 @@ Validate the scroll during dry runs.
 
 - Focus a safe blank area inside the scrollable app first.
 - Avoid browser borders, desktop edges, sticky footers, and app chrome.
+- Prefer real scroll-wheel/trackpad-style events over keyboard scrolling.
 - Prefer small repeated scroll increments over one large jump.
-- If wheel events are unreliable, use repeated arrow-key events.
+- Use repeated arrow-key events only as a fallback after wheel events are
+  proven unreliable. Arrow keys often look jumpy and may not move far enough.
 - Return the list to a useful position before the next scripted click.
 
 **Pace.** Scrolls should feel like a person reading, not a machine skimming.
@@ -492,31 +531,39 @@ that a viewer can register what's on screen as it passes), with at least
 short, quick bursts — one slower, longer burst reads as deliberate; several
 quick bursts read as nervous or stalled.
 
-The helper defaults below produce ~1.4s down-bursts; tune `delay` (per-key
-pause) up rather than adding more bursts if a take feels rushed.
+The helper defaults below produce visible wheel-based motion. Tune `delay`
+or `delta` rather than switching to Page Down or arrow keys if a take feels
+rushed. If the story needs a full browse of a page, scroll down slowly and
+then scroll back up slowly; do not use Home/End/Page Down during the visible
+scroll beat unless the user explicitly asks for a jump.
+To make a wheel scroll about 50% faster, multiply `delay` by roughly `0.67`.
+To cover more of the page per swipe burst, increase the numbers in the
+acceleration curve rather than adding more bursts.
+For the most human-looking motion, prefer several trackpad-like swipe bursts
+instead of one long constant wheel stream. Each burst should accelerate,
+decelerate, then pause briefly before the next swipe.
 
-Reusable helper:
+This skill includes a reusable scroll-wheel helper at:
+
+```text
+scripts/scroll-wheel.swift
+```
+
+Resolve it relative to this `SKILL.md` file. Reusable shell wrapper:
 
 ```bash
+SCROLL_WHEEL="$SKILL_DIR/scripts/scroll-wheel.swift"
 smooth_scroll_down_and_back() {
-  local down_steps="${1:-32}"
-  local up_steps="${2:-24}"
-  local delay="${3:-0.045}"
-  local pause="${4:-0.45}"
+  local down_bursts="${1:-5}"
+  local up_bursts="${2:-5}"
+  local delay="${3:-0.034}"
+  local burst_pause="${4:-0.18}"
+  local curve="${5:-21,42,75,117,162,117,75,42,21}"
+  local bottom_pause="${6:-0.80}"
 
-  osascript <<APPLESCRIPT
-tell application "System Events"
-  repeat ${down_steps} times
-    key code 125
-    delay ${delay}
-  end repeat
-  delay ${pause}
-  repeat ${up_steps} times
-    key code 126
-    delay ${delay}
-  end repeat
-end tell
-APPLESCRIPT
+  "$SCROLL_WHEEL" trackpad "$down_bursts" down "$delay" "$burst_pause" "$curve"
+  sleep "$bottom_pause"
+  "$SCROLL_WHEEL" trackpad "$up_bursts" up "$delay" "$burst_pause" "$curve"
 }
 ```
 
@@ -525,14 +572,20 @@ Example:
 ```bash
 cliclick -e 300 m:1200,390 c:.
 sleep 0.2
-smooth_scroll_down_and_back 32 24 0.045 0.45
+smooth_scroll_down_and_back 5 5 0.034 0.18 "21,42,75,117,162,117,75,42,21" 0.8
 ```
 
 For a slower, more documentary pace (e.g. for a long settings page where
-the user needs to read each row), try `smooth_scroll_down_and_back 40 30 0.06 0.6`.
+the user needs to read each row), try
+`smooth_scroll_down_and_back 5 5 0.04 0.28 "4,8,14,22,30,22,14,8,4" 1.2`.
 
 If scrolling opens a document, changes filters, summons macOS UI, or does not
 move the intended list, fix the focus target and repeat the dry run.
+
+Before typing into controls near notification toasts or banners, wait for the
+transient UI to clear. A toast can steal attention, occlude a target, or make
+the next action look rushed. For upload-complete toasts, a 8-10 second wait is
+usually enough unless the app shows a visible close animation or progress state.
 
 ## Dry Runs
 

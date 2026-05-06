@@ -327,8 +327,18 @@ func writeStartupQR(port int, pin string) string {
 	if err != nil {
 		return ""
 	}
-	path := fmt.Sprintf("%s/screen-studio-status-qr.png", os.TempDir())
-	if err := os.WriteFile(path, png, 0o644); err != nil {
+	f, err := os.CreateTemp("", fmt.Sprintf("screen-studio-status-qr-%d-%s-*.png", port, pin))
+	if err != nil {
+		return ""
+	}
+	path := f.Name()
+	if _, err := f.Write(png); err != nil {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return ""
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
 		return ""
 	}
 	return path
