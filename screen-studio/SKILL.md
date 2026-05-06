@@ -586,7 +586,13 @@ During the take:
 - Run the rehearsed helper commands or manual steps when the UI is ready.
 - Wait as long as needed for uploads, processing, search, loading, or responses.
 - Capture every expected action and final state clearly.
-- Wait a short beat at the end.
+- Hold on the final frame just long enough to confirm it. **Cap a still
+  final shot at ~10 seconds.** Anything beyond that is dead air — the editor
+  can freeze the last frame and extend it for as long as needed in post.
+  Only keep rolling past 10 seconds if something on screen is still
+  animating, loading, or visibly changing (a fade-in, a spinner, an
+  incoming notification, a typing indicator). Once the screen is truly
+  static, stop.
 - Stop Screen Studio with `Command-Control-Return`.
 - Push `phase=stopped` to the status server right after the stop hotkey.
 
