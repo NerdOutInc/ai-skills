@@ -432,11 +432,24 @@ Keeper takes should move the actual macOS pointer at a human pace.
 - If missing, ask before installing it.
 - `cliclick` uses global macOS display coordinates.
 - Do not pass Computer Use or screenshot coordinates directly to `cliclick`.
-- Retina screenshots are usually physical pixels; `cliclick` uses logical
-  points. On a 2x Retina display, divide screenshot coordinates by 2.
-- Prefer coordinates from the live pointer or window-origin math.
+- Prefer live pointer coordinates when possible. Put the pointer over the
+  target, then read the exact `cliclick` coordinate with:
 
-Read the front Helium window origin and size with:
+  ```bash
+  cliclick p:.
+  ```
+
+- If using a screenshot, convert from screenshot pixels to global logical
+  display coordinates before calling `cliclick`. Retina screenshots are usually
+  physical pixels; `cliclick` uses logical points. On a 2x Retina display,
+  divide screenshot coordinates by 2.
+- Only use window-relative math as a rare fallback when the target point was
+  intentionally measured relative to a window, or when coordinates must survive
+  the window moving. In that case, document both the window origin and the
+  relative point, then add them to get the global `cliclick` coordinate.
+
+For the rare window-relative fallback, read the front Helium window origin and
+size with:
 
 ```bash
 osascript <<'APPLESCRIPT'
