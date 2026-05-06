@@ -1,144 +1,237 @@
 ---
 name: screen-studio
-description: Record repeatable macOS screencasts with Screen Studio. Use when Codex is asked to capture a screen recording, record a web app or product demo, rehearse a Screen Studio take, start or stop Screen Studio recording, choose full-display versus window capture, use Helium browser for clean web recordings, run test takes to clear first-time prompts, or document exact click/interaction locations before a final recording.
+description: >
+  Record repeatable macOS full-display screencasts with Screen Studio. Use when
+  Codex is asked to capture a full-display screen recording, record a web app or
+  product demo, rehearse a Screen Studio take, start or stop Screen Studio
+  recording, use Helium for clean web recordings, run test takes, or document
+  exact click locations before a final recording. This skill does not support
+  window or selected-area capture.
 ---
 
 # Record Screen Studio Screencasts
 
-## Overview
+## Scope
 
-Use Screen Studio for recording. Optimize for a clean capture and a predictable final take; do not export or edit the video unless the user explicitly asks.
+Use Screen Studio for recording. This skill records the full display only. Do
+not offer or use window capture or selected-area capture. Do not export, trim,
+upload, or edit the video unless the user explicitly asks.
 
-When asked to operate the Mac directly, use available desktop automation or Computer Use capabilities to control Screen Studio, Helium, and the target app. Use browser automation only for setup or verification inside a web page; the actual screencast should be captured from the visible Helium/browser window.
+Use desktop automation for Screen Studio, Helium, and the target app. Computer
+Use is acceptable for inspection and off-camera setup, but do not use Computer
+Use to start or stop Screen Studio for a keeper take. Its cursor overlay can
+appear in the captured screen.
+
+Use browser automation only for setup or verification inside a page. The actual
+screencast should be captured from the visible app or Helium window.
+
+Audio timing is not required. Treat audio duration as a guide to the expected
+story beats. The recording just needs to capture each required action clearly.
+If the UI needs time to load, index, upload, or respond, wait. The user can
+trim or retime the footage to match narration after recording.
 
 ## Hard Gates
 
 These requirements are not optional for keeper takes:
 
-- Do not start a keeper until the full scripted interaction sequence has passed
-  at least two dry runs without manual correction.
-- If the Screen Studio start/stop path has not been proven in the current app
-  state, run a short smoke capture first and verify it creates a fresh
-  `.screenstudio` project with a readable display track.
-- Do not proceed if Codex or unrelated workbench apps are visible in the capture
-  area. Hide them before opening or starting Screen Studio capture.
-- Do not proceed if old Screen Studio project/recording windows are visible.
-  Minimize them first. The active "Start Recording" picker is allowed because
-  it hides itself when capture starts.
-- Do not resize or reposition target windows as part of recording setup. The
-  user is responsible for approving window sizes and positions before recording;
-  verify they are stable and work with the scripted coordinates.
-- For logged-in browser flows, verify the signed-in destination immediately
-  before recording. If the take redirects to a login page or exposes the wrong
-  account state, reject it. Ask the user to verify the signed-in state before recording.
-- Do not call a take a keeper until duration has been measured with `ffprobe`
-  and a timestamp-based contact sheet has been inspected.
+- Validate the full interaction sequence with at least two dry runs without recording.
+- Do not resize or reposition the target window during recording setup.
+- Verify logged-in browser flows immediately before recording.
+- Hide Codex and unrelated workbench apps from the capture area.
+- Minimize old Screen Studio project and recording windows.
+- Start and stop Screen Studio with keyboard shortcuts, not Computer Use.
+- If the keyboard recording path is untested, prove it with a smoke capture.
+- Do not call a take a keeper until the display track has been checked with
+  `ffprobe` and a timestamp contact sheet has been inspected.
+- Reject takes that miss required actions or show the wrong state. Do not reject
+  a complete take only because it is longer than the audio.
 
-## Script and Audio Preparation
+## Actions File And Audio Prep
 
-If the user provides an audio narration file and no complete screencast script, transcribe the audio before planning the recording. Use the transcript to create the original screencast script file or notes file that will drive the dry runs and keeper take.
+The "actions file" is a human-readable planning document (markdown or notes)
+for a single screencast. It is not a bash script. It captures the take's
+story, on-camera steps, and dry-run findings, and may reference small bash or
+AppleScript helpers that live as separate files beside it.
 
-- Identify the audio file path, measure its duration with `ffprobe`, and transcribe it with an available local transcription tool. If no transcription tool is available, tell the user what is missing and ask how they want to proceed.
-- To discover local transcription tooling on this Mac, check the usual CLIs and
-  Python packages before giving up:
+If the user provides audio and no complete actions file, transcribe the audio
+before planning the recording. Use the transcript to identify the expected
+on-screen actions.
 
-  ```bash
-  command -v whisper || true
-  command -v mlx_whisper || true
-  command -v whisper-cli || true
-  command -v whisperx || true
+Check local transcription tooling before giving up:
 
-  python3 - <<'PY'
-  for mod in ("whisper", "faster_whisper", "mlx_whisper", "torch", "openai"):
-      try:
-          __import__(mod)
-          print(mod, "OK")
-      except Exception as exc:
-          print(mod, "NO", type(exc).__name__)
-  PY
-  ```
+```bash
+command -v whisper || true
+command -v mlx_whisper || true
+command -v whisper-cli || true
+command -v whisperx || true
 
-  A known-good local path is `/opt/homebrew/bin/whisper-cli`, from
-  `whisper.cpp`. If `whisper-cli` exists, find its cached model before running:
+python3 - <<'PY'
+for mod in ("whisper", "faster_whisper", "mlx_whisper", "torch", "openai"):
+    try:
+        __import__(mod)
+        print(mod, "OK")
+    except Exception as exc:
+        print(mod, "NO", type(exc).__name__)
+PY
+```
 
-  ```bash
-  find "$HOME/.cache/whisper.cpp" /opt/homebrew -maxdepth 5 \
-    -name 'ggml-*.bin' 2>/dev/null
-  ```
+If no transcription tool is installed, ask the user before installing one.
+The preferred local path is `whisper.cpp` via Homebrew because it is fast on
+Apple Silicon and runs offline:
 
-  The known-good model path on this Mac is
-  `$HOME/.cache/whisper.cpp/ggml-base.en.bin`. Convert m4a files to wav because
-  this `whisper-cli` build advertises wav/flac/mp3/ogg input:
+```bash
+brew install whisper-cpp
+```
 
-  ```bash
-  ffmpeg -y -i video.m4a -ar 16000 -ac 1 -c:a pcm_s16le /tmp/video.wav
-  whisper-cli \
-    -m "$HOME/.cache/whisper.cpp/ggml-base.en.bin" \
-    -f /tmp/video.wav \
-    -l en \
-    -otxt -osrt -oj \
-    -of /tmp/video-transcript
-  ```
+After install, download a model (the known-good model on this Mac is
+`ggml-base.en.bin`). Place it under `$HOME/.cache/whisper.cpp/`:
 
-- Build a script file from the transcript with the audio source, duration, transcript notes, timeline cues, planned screen actions, setup/reset instructions, dry-run command sequence, state checks, and keeper notes.
-- If the narration does not make the intended on-screen action clear, ask clarifying questions before writing or finalizing the script file. Examples: what app/page should be shown, what data should be searched, which filters should be used, whether to log in on camera, or where the take should end.
-- Do not guess risky screen actions from vague narration. Make a conservative draft only after the user answers or the local context clearly establishes the intended product flow.
-- Treat the script file as the living source of truth. After the first dry run, update it with the discovered `cliclick` commands, coordinates, waits, and expected visible states. After the second dry run, update it again with any corrections needed to make the command sequence pass.
-- When the user asks for changes after a rehearsal or keeper take, update the script file with the new instructions and command changes before recording again.
-- If a dry-run or keeper flow grows helper scripts, save those scripts beside the script/notes file in the local project rather than leaving them in `/tmp`. Temporary copies are fine while experimenting, but the reproducible command sequence must be versioned with the project before finishing.
+```bash
+mkdir -p "$HOME/.cache/whisper.cpp"
+curl -L \
+  -o "$HOME/.cache/whisper.cpp/ggml-base.en.bin" \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+```
 
-## Human Cursor Control
+`ffmpeg` and `ffprobe` are required for audio conversion, duration checks, and
+the contact sheet. `ffprobe` ships with `ffmpeg`. If either is missing
+(`command -v ffmpeg` or `command -v ffprobe` returns nothing), ask the user
+before installing:
 
-Use `cliclick` for visible cursor movement during recorded interactions. Computer Use clicks are acceptable for setup and rehearsal, but they can look abrupt on camera; keeper takes should move the actual macOS pointer with human-paced motion.
+```bash
+brew install ffmpeg
+```
 
-- Check for `cliclick` before recording with `command -v cliclick`.
-- If `cliclick` is missing, ask for action-time confirmation before installing it, for example with `brew install cliclick`.
-- `cliclick` uses global macOS display coordinates, not Computer Use screenshot coordinates or browser/window-local coordinates. Do not pass a visible screenshot coordinate directly to `cliclick`.
-- Retina screenshots from `screencapture` are usually physical pixels, while `cliclick` uses logical macOS points. On a 2x Retina display, a screenshot point must usually be divided by 2 before it can become a `cliclick` coordinate. Prefer recording coordinates from the live pointer or from window-origin math instead of copying screenshot pixels.
-- Before using `cliclick`, activate the target app and get the front window's global position. Convert with `globalX = windowX + localX` and `globalY = windowY + localY`.
-- Use this AppleScript pattern to read the front window origin and size:
+The known-good local path is `/opt/homebrew/bin/whisper-cli`, from
+`whisper.cpp`. If it exists, find the cached model:
 
-  ```bash
-  osascript \
-    -e 'tell application "System Events" to tell process "Helium" to set {x, y} to position of front window' \
-    -e 'tell application "System Events" to tell process "Helium" to set {w, h} to size of front window' \
-    -e 'return (x as text) & "," & (y as text) & "," & (w as text) & "," & (h as text)'
-  ```
+```bash
+find "$HOME/.cache/whisper.cpp" /opt/homebrew -maxdepth 5 \
+  -name 'ggml-*.bin' 2>/dev/null
+```
 
-- During rehearsals, capture the real global screen coordinates for each target and convert them into a `cliclick` script. Example: if Helium is at `184,50` and a target is around local `76,216`, click global `260,266`.
-- Use `-e 300` as the current baseline for human-looking cursor speed in keeper takes. Keep pauses around the move so the viewer can see intent, for example `cliclick -e 300 -w 380 m:700,420 w:1000 m:260,266 w:750 c:.`.
-- When calibrating cursor speed, keep the same start point, target point, and waits while changing only `-e`; this makes each test comparable.
-- Prefer smooth movement commands before clicks, short waits before and after clicks, and don't move the cursor while narration is speaking.
-- Use visible cursor movement for clicks and focus changes. Use AppleScript, keyboard shortcuts, or app-native typing only when they look natural and avoid brittle pointer work.
-- For keeper-take typing that is visible on camera, type a little slower than
-  normal automation. Prefer paced keystrokes with short per-character delays
-  over instant paste or `cliclick t:` for long visible text. Clipboard paste is
-  still fine for off-camera setup, config blocks, or flows where the typing
-  itself is not part of the demo.
-- Do not rely on browser automation, DOM clicks, or invisible app scripting for keeper-take interactions unless the user explicitly wants an automated-looking capture.
+The known-good model path on this Mac is:
 
-## Smooth List Scrolling
+```text
+$HOME/.cache/whisper.cpp/ggml-base.en.bin
+```
 
-When a screencast should show a list, grid, or search result set being browsed,
-add a human-looking scroll after the list first appears and after filters
-or searches settle. Validate the scroll during dry runs before carrying it into a
-keeper take.
+Convert m4a files to wav for this `whisper-cli` build:
 
-- Focus the scrollable page or list first with a visible `cliclick` move/click.
-  Choose a blank area inside the browser or app window that does not open an
-  item, toggle a filter, or land outside the target window.
-- Avoid edge coordinates near the desktop, browser border, widgets, or app
-  chrome. Re-check the coordinate whenever the window is resized.
-- Prefer small, repeated scroll increments with short delays over one large jump.
-  The result should feel like a trackpad browse, not a page teleport.
-- If wheel events or Swift/CGEvent scrolling do not reliably affect the target
-  app, use repeated arrow-key events after focusing the scrollable area. This
-  proved reliable in Helium for Paperless-style document grids.
-- Return the list to a useful position before the next scripted click if the next
-  target assumes the top of the results.
+```bash
+ffmpeg -y -i video.m4a \
+  -ar 16000 \
+  -ac 1 \
+  -c:a pcm_s16le \
+  /tmp/video.wav
 
-Use this helper in rehearsal scripts when arrow-key scrolling is the reliable
-path:
+whisper-cli \
+  -m "$HOME/.cache/whisper.cpp/ggml-base.en.bin" \
+  -f /tmp/video.wav \
+  -l en \
+  -otxt \
+  -osrt \
+  -oj \
+  -of /tmp/video-transcript
+```
+
+Create or update the actions file with:
+
+- Audio path, duration, and transcript cues.
+- Planned screen actions and expected visible states.
+- Setup and reset steps.
+- Coordinates, helper commands, waits, and state checks.
+- Dry-run notes, recording result, project path, and frame-review result.
+
+Do not force a full screencast into one brittle automation script. Prefer
+small helper commands for visible actions, then run them manually when the UI
+is ready. Save helpers beside the actions file, not only in `/tmp`.
+
+Ask clarifying questions if the narration does not make the on-screen action
+clear. Do not guess risky actions such as logins, destructive changes, account
+switches, final submissions, purchases, or provisioning steps.
+
+## Window Setup
+
+For web recordings, use Helium by default if installed because its chrome is
+clean. Use the default browser if Helium is not installed, or use the browser
+requested by the user.
+
+Before rehearsals and keeper takes:
+
+- Put the target app or Helium window in the desired starting state.
+- Keep the user-approved display, window size, position, profile, and zoom.
+- Do not resize or reposition the target window yourself.
+- If browser state is noisy, reopen Helium to the target URL off camera.
+- Avoid visible address-bar focus unless it is part of the demo.
+- For clean page loads, set the URL off camera and click safely in the page.
+- Verify signed-in pages immediately before recording.
+- If the user is already logged in, do not quit Helium unless a dry run proves
+  the session survives.
+
+Minimize old Screen Studio project or recording windows before opening the
+picker. The active "Start Recording" picker may appear in accessibility as
+windows named `Screen Studio`, `Start Recording`, an empty dialog, or
+`recording-manager-widget`. Do not count that active picker as a stale project
+window because it hides itself when recording starts.
+
+Hide Codex and unrelated workbench apps before the final take. Keep
+Finder/Desktop visible when the demo needs a Desktop file, a drag/drop source,
+or a Finder window on camera. On macOS, verify process names when hiding apps;
+for example, VS Code may appear as `Code`.
+
+Restore Codex after recording stops so the user can see verification work.
+
+## Cursor And Coordinates
+
+Use `cliclick` for visible cursor movement during recorded interactions.
+Keeper takes should move the actual macOS pointer at a human pace.
+
+- Check for `cliclick` with `command -v cliclick`.
+- If missing, ask before installing it.
+- `cliclick` uses global macOS display coordinates.
+- Do not pass Computer Use or screenshot coordinates directly to `cliclick`.
+- Retina screenshots are usually physical pixels; `cliclick` uses logical
+  points. On a 2x Retina display, divide screenshot coordinates by 2.
+- Prefer coordinates from the live pointer or window-origin math.
+
+Read the front Helium window origin and size with:
+
+```bash
+osascript <<'APPLESCRIPT'
+tell application "System Events" to tell process "Helium"
+  set {x, y} to position of front window
+  set {w, h} to size of front window
+end tell
+return (x as text) & "," & (y as text) & "," & (w as text) & "," & (h as text)
+APPLESCRIPT
+```
+
+Use `-e 300` as a baseline for human-looking cursor speed. Keep pauses around
+movement so the viewer can see intent. Don't move the cursor while narration
+is speaking unless the cursor movement is the story.
+
+Prefer visible cursor movement for clicks and focus changes. Use AppleScript,
+keyboard shortcuts, or app-native typing when they look natural and avoid
+brittle pointer work. Do not rely on browser automation, DOM clicks, or
+invisible scripting for keeper interactions unless the user explicitly wants an
+automated-looking capture.
+
+For visible typing, type a little slower than normal automation. Prefer paced
+keystrokes over instant paste unless typing is not part of the demo.
+
+## Scrolling
+
+When showing a list, grid, or search result set, add a human-looking scroll.
+Validate the scroll during dry runs.
+
+- Focus a safe blank area inside the scrollable app first.
+- Avoid browser borders, desktop edges, sticky footers, and app chrome.
+- Prefer small repeated scroll increments over one large jump.
+- If wheel events are unreliable, use repeated arrow-key events.
+- Return the list to a useful position before the next scripted click.
+
+Reusable helper:
 
 ```bash
 smooth_scroll_down_and_back() {
@@ -162,7 +255,7 @@ APPLESCRIPT
 }
 ```
 
-Example sequence:
+Example:
 
 ```bash
 cliclick -e 300 m:1200,390 c:.
@@ -170,192 +263,158 @@ sleep 0.2
 smooth_scroll_down_and_back 18 18 0.025
 ```
 
-Record the working focus coordinate and tuned step counts in the script or notes
-file. If the scroll opens a document, changes filters, summons macOS UI, or does
-not move the intended list, fix the focus target and repeat the dry run before
-recording.
+If scrolling opens a document, changes filters, summons macOS UI, or does not
+move the intended list, fix the focus target and repeat the dry run.
 
-## Coordinate Calibration and State Checks
+## Dry Runs
 
-Treat dry runs as data-gathering runs, not just timing runs. Every click target that will appear in the keeper take needs a recorded coordinate or a stable target description before the final recording starts.
+Treat dry runs as data gathering. Do not start a keeper until the visible action
+sequence works without manual correction.
 
-- Use the first dry run as the discovery run. As soon as a click or typed interaction works, write the exact `cliclick` command, coordinate, wait, and expected visible result into the script or screencast notes file.
-- Use the second dry run as the command-validation run. Execute the recorded `cliclick` commands from the script file, update any wrong coordinates or waits, and repeat until the script drives the app correctly.
-- Only record the Screen Studio keeper after the recorded `cliclick` command sequence has passed a dry run without manual correction.
-- Keep updating the script file after every dry run, failed take, user-requested change, or calibration fix so the next agent can reproduce the current best-known flow.
-- During dry runs, perform each click, field focus, form submit, dropdown selection, and search exactly as planned, then record the actual `cliclick` coordinate that worked.
-- After each click or form submission in a dry run, inspect the visible screen before continuing. Use `screencapture -x /tmp/name.png` plus image inspection, Computer Use state inspection, or a browser/app-specific check.
-- Do not advance to the next scripted task until the app has visibly responded: the page navigated, the URL changed, the active page title changed, a result count updated, a filter chip appeared, a modal opened, or the expected element became visible.
-- Required when switching between apps: after activating the next app, confirm
-  the intended window is visible and frontmost before performing the next click,
-  keystroke, paste, or menu action. Use Computer Use state inspection,
-  `screencapture`, or a small AppleScript/window-title check. Do not rely on a
-  fixed sleep alone after an app switch.
-- When editing a config file on camera, verify the save reached disk before
-  continuing. Use a structured check such as `jq -e` for JSON files, and reject
-  the take if the editor reports a stale-file or save-conflict warning.
-- When a recorded flow depends on a local connector, MCP server, extension, or
-  background bridge process, verify it is actually loaded after app relaunch
-  before submitting the on-camera query. Prefer a visible connector/tool state
-  plus a process or API check over a fixed sleep.
-- If the app does not respond, stop and fix the coordinate, focus target, wait time, or state reset in rehearsal. Do not carry an unverified click into a keeper take.
-- For browser form flows, prefer explicit clicks on each field and submit button when focus is fragile. Use Tab only after a rehearsal proves it reliably focuses the next field.
-- For pages with sticky footers, price summaries, final submit bars, or
-  destructive/provisioning controls, focus and scroll from a safe blank/body
-  area above the sticky control. Do not click the sticky footer just to focus
-  the page.
-- For dropdowns and autocomplete panels, capture coordinates for both the control and the selected option after the list is open. Re-check those coordinates if the window size, zoom, or data set changes.
-- Add waits after navigation and search/filter actions, but verify with a screenshot or visible-state check during rehearsal rather than guessing a sleep duration.
-- If keyboard shortcuts or special keys summon unexpected macOS UI during rehearsal, replace them with visible mouse movement, explicit clicks, or a safer app-native action before recording again.
+1. Discovery run: find coordinates, waits, typed text, reset steps, and state
+   checks.
+2. Validation run: execute the recorded commands and update them until every
+   expected state is reached.
 
-## Screen Studio Shortcuts
+During dry runs:
 
-Use these user-provided Screen Studio shortcuts unless the user says they changed:
+- Trigger the same clicks, typing, navigation, and pauses planned for the take.
+- Inspect the visible screen after each click, field edit, form submit, and
+  navigation.
+- Do not continue until the app has visibly changed state.
+- Dismiss first-time prompts, permission dialogs, cookie banners, update
+  notices, focus warnings, and one-off UI.
+- Replace brittle shortcuts with visible mouse movement or safer app-native
+  actions if they summon unexpected macOS UI.
+- Reset the app to the desired starting state after each run.
+- Update the actions file while the discoveries are fresh.
 
-- Start new recording picker / finish recording: Command + Control + Return.
-- Resume or pause recording in progress: Command + Option + P.
-- Restart recording in progress: Command + Option + Delete.
-- Create recording flag: Command + Option + Control + F.
-- Select/configure entire display: Command + Option + 3.
-- Select/configure single window: Command + Option + 4.
-- Select/configure area: Command + Option + 5.
-- Show speaker notes: Command + Option + /.
-- Start or stop prompter in speaker notes: Command + Option + Period.
-- Show or hide recording controls: Command + Option + Apostrophe.
+When audio exists, rehearse for complete screen coverage, not exact duration.
+Capture each expected action clearly. Long waits are acceptable.
 
-## Workflow
+## Screen Studio Keyboard Flow
 
-1. Confirm the capture scope.
-   - If not provided with an audio file or a complete script, ask the user to describe the intended screen content and flow in detail before writing the script or planning the recording. Examples: what app/page should be shown, what data should be searched, which filters should be used, whether to log in on camera, or where the take should end.
-   - Before starting Screen Studio recording, ask whether to record the full display or a specific window unless the user already said so.
-   - If the user asks to record the entire screen, use full-display capture. Do not use Screen Studio's window picker for that take.
-   - If recording a window, identify the exact app/window title to capture.
-   - Confirm any requested microphone, system audio, or camera settings; otherwise leave recording inputs unchanged.
+Use this full-display recording flow for keeper takes:
 
-2. Prepare the target window.
-   - For web recordings, use the Helium browser by default because its clean chrome looks better on camera. Use another browser only when the user asks or the workflow depends on a specific browser profile, extension, developer tool, or login state.
-   - If the browser start state has become noisy, quit Helium completely and reopen it from scratch to the target URL during preflight. Avoid starting a keeper from an old Helium session with stale address-bar focus, selected URL text, selected page text, or leftover navigation state.
-   - If the workflow depends on a signed-in web session, do not quit Helium
-     after the user has logged in unless a dry run proves the session survives.
-     Prefer keeping Helium open, closing extra tabs, setting the active tab URL
-     directly, and verifying the signed-in destination just before recording.
-   - Bring the app or Helium browser window to the foreground and put it in the state the demo should start from.
-   - Open the target URL in Helium before rehearsals, then keep the same window, profile, zoom level, size, and position through the final take.
-   - Do not use `Command+L` as the first visible browser action unless selecting the address bar is part of the intended demo. For clean openings, load the target URL off camera, then click safely in the page body before starting so the address bar is not focused or selected. For mid-recording site switches where the address bar is not part of the story, prefer opening the target URL through the app or automation path that does not visibly select the URL or show browser suggestions.
-   - Do not resize or reposition the target window during setup. If the window
-     size or position looks wrong for the recording, pause and ask the user to
-     adjust it before continuing. After any user adjustment, re-run coordinate
-     calibration and dry runs.
-   - Required before every new recording: minimize any open Screen Studio
-     recording/project windows before opening the picker, using a recording
-     shortcut, or starting capture from a Screen Studio menu. Verify Screen
-     Studio has zero non-minimized project/recording windows. The active
-     Screen Studio "Start Recording" picker/window does not need to be hidden
-     before recording; it hides itself when the recording starts. The active
-     picker may appear to accessibility as windows named `Screen Studio`,
-     `Start Recording`, an empty dialog, or `recording-manager-widget`; do not
-     count those as stale project windows. If any old Screen Studio project
-     window remains visible, stop and fix the window state before recording.
-   - Required before every new recording: hide the Codex app and verify no Codex window is visible in the capture area or behind the target app. Do this before opening the Screen Studio picker and before the final take so Screen Studio does not highlight, preview, or capture Codex instead of the target app.
-   - Hide non-target workbench apps such as VS Code, Finder, Safari, or old setup windows unless the current on-camera step intentionally uses them. On macOS, verify the visible process name when hiding apps; for example VS Code may appear as `Code`.
-   - Required when not recording: restore the Codex window so the user can see what you are doing and thinking about. Only keep Codex hidden during the narrow pre-recording setup window and while the take is running.
-   - Keep the user-approved window size, display, and position stable across
-     rehearsals and the final take.
+1. Activate Screen Studio.
+2. Press `Esc` once to clear stale picker state.
+3. Press `Command-Control-Return` to toggle the recording picker.
+4. Press `Command-Option-3` to choose Display recording.
+5. Activate Screen Studio again.
+6. Press `Return` to start recording.
+7. Press `Command-Control-Return` to stop recording.
 
-3. Run dry rehearsals before the keeper take.
-   - Do at least two dry test runs before recording with Screen Studio. Use more runs if the app changes state, prompts appear, timing is uncertain, or the flow involves several interactions.
-   - The first dry run is for discovery: find the working coordinates, waits, typed text, reset steps, and state checks. Write the resulting `cliclick` commands into the script or notes file while the discoveries are fresh.
-   - The second dry run is for validation: run the recorded commands from the script or notes file and update them until the app reaches every expected state without manual correction.
-   - Start Screen Studio only after the recorded command sequence has been validated in a dry run.
-   - If the Screen Studio capture path itself is untested, run one very short Screen Studio capture test after the dry command sequence passes. Verify that the start path creates a saved project before using it for the keeper.
-   - During rehearsals, intentionally trigger the same clicks, typing, navigation, and pauses planned for the final take.
-   - After each click, field edit, form submit, and navigation during dry runs, inspect the screen and confirm the app actually changed state before continuing to the next task.
-   - Dismiss first-time prompts, permission dialogs, cookie banners, update notices, focus warnings, or other one-off UI before the final take.
-   - Record the exact click targets and interaction sequence as coordinates or stable UI descriptions. Prefer coordinates when using desktop automation; include enough context to reproduce each click and the visible state that proves it worked.
-   - Build or update a `cliclick` rehearsal script for the visible cursor path. Include waits, typed text, and reset steps so the final take feels hand-driven instead of machine-driven.
-   - If matching an audio track or narration script, measure the rehearsal recording duration and adjust the opening, per-section, and ending pauses before recording the keeper take. The raw recording should try to land close to the audio length, but it does not have to be perfect because editing can speed up or slow down specific sections later. Long waits such as a Claude query or page load can be accelerated in the edit if the screen content is otherwise correct.
-   - Reset the app to the desired starting state after each rehearsal.
+The second activation matters. The picker can be visible while another app is
+frontmost. If Screen Studio is not frontmost, the final `Return` can go to
+Codex, Terminal, or another app instead of starting recording.
 
-4. Configure Screen Studio.
-   - Required pre-recording gate: minimize all existing Screen Studio
-     recording/project windows before starting a new recording. Do this even
-     when using keyboard shortcuts or the Record menu, because an old Screen
-     Studio project window can otherwise become the first visible thing in the
-     new capture. Count or inspect Screen Studio windows after minimizing; zero
-     non-minimized Screen Studio project/recording windows is required. Do not
-     count the active "Start Recording" picker/window as a stale project
-     window; it may remain visible while configuring the take because it hides
-     itself when recording starts.
-   - Required pre-recording gate: hide Codex and confirm it is not visible anywhere in the recording view. If Codex remains visible behind the target app, stop and clean up the window state before recording.
-   - Open or foreground Screen Studio, or use Command + Control + Return to open the new recording picker.
-   - Choose full display or window capture based on the confirmed scope. Prefer Command + Option + 3 to select/configure entire-display capture and Command + Option + 4 to select/configure single-window capture.
-   - Use Command + Option + 5 only if the user explicitly asks to record a selected area.
-   - Verify the selected display/window is the intended one before starting.
-   - The Screen Studio menu path and capture shortcuts may only configure the
-     picker; they are not proof that recording has started. Click the visible
-     purple "Start recording" button in the picker and verify a short smoke
-     capture creates a fresh project before using that start path for a keeper.
-     On the built-in Retina display, the latest working full-display start
-     coordinate was `m:757,547 c:.`, after selecting display capture at
-     `m:420,905 c:.`.
-   - It is acceptable to start recording with the Screen Studio UI after the picker is configured.
-   - The Screen Studio recording widget is configured to stay hidden during recording, so do not rely on the widget for stopping a take.
-   - Start recording only after the target window is user-approved, rehearsals
-     have cleared unexpected UI, existing Screen Studio project windows are
-     minimized, and Codex is hidden from the recording view.
+If this path has not been proven in the current app state, run a 3-5 second
+smoke capture. Verify that Screen Studio created a fresh `.screenstudio`
+project with a readable display track before using the path for a keeper.
 
-5. Perform the final take.
-   - Start recording in Screen Studio, either from the configured Screen Studio UI or with the appropriate shortcut.
-   - Wait a short beat before interacting with the target app.
-   - Follow the rehearsed click/typing/navigation sequence exactly, using `cliclick` for visible pointer movement wherever practical.
-   - Wait a short beat at the end, then stop the recording with Command + Control + Return. The recording widget is hidden, so do not expect a visible stop control.
-   - After recording stops, restore Codex so the user can see verification work, notes, and any recovery steps.
-   - After stopping, verify Screen Studio created a fresh project in `~/Screen Studio Projects` and that the recording folder contains a display track such as `recording/channel-1-display-0.mp4`.
-   - When matching narration, use `ffprobe` or Screen Studio's project metadata to compare the raw display-track duration with the target script/audio length. Re-record if the timing is materially short, rushed, or missing required screen beats. If the recording is a little long because one section waited on a response or page load, note that the section can be sped up in editing instead of automatically discarding the take.
-   - Required post-take review: generate a timestamp-based contact sheet from the saved display track and inspect it before calling the take a keeper. Sample by elapsed time, not by raw frame number, so the review covers the beginning, middle, end, and scripted transitions.
-   - For repo-managed screencasts, add a helper script for the frame review alongside the actions file, for example `video-scripts/<nn>-<slug>-check-frames.sh`, and record the command plus contact sheet path in the notes file.
-   - Zoom or open individual sampled frames around risky transitions such as app switches, settings/config edits, browser URL changes, Claude/tool responses, response scrolling, and ending holds. Reject the take if the samples show Screen Studio/Codex in the capture, stale windows, address-bar suggestions, selected URL/page text, failed saves, missing connectors, wrong query text, or an incorrect final state.
-   - A reusable frame-check command pattern is:
+## Final Take
 
-     ```bash
-     PROJECT="$HOME/Screen Studio Projects/Built-in Retina Display YYYY-MM-DD HH:MM:SS.screenstudio"
-     TRACK="$PROJECT/recording/channel-1-display-0.mp4"
-     OUT="/tmp/screencast-contact-sheet.jpg"
-     FRAME_DIR="/tmp/screencast-contact-frames"
+Before starting:
 
-     rm -rf "$FRAME_DIR"
-     mkdir -p "$FRAME_DIR"
-     ffprobe -v error -show_entries format=duration -of default=nk=1:nw=1 "$TRACK"
-     for t in 0 15 30 60 90 120 150 180 210; do
-       ffmpeg -y -ss "$t" -i "$TRACK" -frames:v 1 -q:v 2 \
-         "$FRAME_DIR/frame-$t.jpg" >/dev/null 2>&1
-     done
-     ffmpeg -y -framerate 1 -pattern_type glob -i "$FRAME_DIR/frame-*.jpg" \
-       -vf "scale=302:196:force_original_aspect_ratio=decrease,pad=302:196:(ow-iw)/2:(oh-ih)/2,tile=4x3" \
-       -frames:v 1 "$OUT"
-     ```
+- Confirm the target app is in the correct starting state.
+- Confirm the target window and Desktop state match the rehearsed coordinates.
+- Minimize old Screen Studio project windows.
+- Hide Codex and unrelated workbench apps.
+- Keep intentional on-camera sources, such as Desktop files, visible.
 
-   - Leave Screen Studio at the saved recording state. Minimize the resulting Screen Studio project window before any additional recording. Do not export, trim, upload, or share unless the user asks.
+During the take:
+
+- Start Screen Studio with the keyboard flow.
+- Wait a short beat.
+- Run the rehearsed helper commands or manual steps when the UI is ready.
+- Wait as long as needed for uploads, processing, search, loading, or responses.
+- Capture every expected action and final state clearly.
+- Wait a short beat at the end.
+- Stop Screen Studio with `Command-Control-Return`.
+
+After stopping:
+
+- Restore Codex.
+- Verify a fresh project exists in `~/Screen Studio Projects`.
+- Verify the display track exists, usually at:
+
+  ```text
+  recording/channel-1-display-0.mp4
+  ```
+
+- Measure duration with `ffprobe`. Treat duration as informational unless the
+  user explicitly asked for live sync.
+- Generate and inspect a timestamp-based contact sheet.
+- Reject the take if sampled frames show missing actions, wrong state, Codex,
+  stale Screen Studio windows, wrong query text, address-bar suggestions,
+  failed saves, missing connectors, or an incorrect final hold.
+- Do not reject a complete take just because waits make it longer than the
+  audio.
+- Leave Screen Studio at the saved project state. Minimize the resulting project
+  window before any additional recording.
+
+Reusable frame-check pattern:
+
+```bash
+PROJECT="$HOME/Screen Studio Projects/name.screenstudio"
+TRACK="$PROJECT/recording/channel-1-display-0.mp4"
+OUT="/tmp/screencast-contact-sheet.jpg"
+FRAME_DIR="/tmp/screencast-contact-frames"
+
+rm -rf "$FRAME_DIR"
+mkdir -p "$FRAME_DIR"
+
+ffprobe \
+  -v error \
+  -show_entries format=duration \
+  -of default=nk=1:nw=1 \
+  "$TRACK"
+
+for t in 0 15 30 60 90 120 150 180 210; do
+  ffmpeg \
+    -y \
+    -ss "$t" \
+    -i "$TRACK" \
+    -frames:v 1 \
+    -q:v 2 \
+    "$FRAME_DIR/frame-$t.jpg" >/dev/null 2>&1
+done
+
+FILTER='scale=302:196:force_original_aspect_ratio=decrease'
+FILTER="${FILTER},pad=302:196:(ow-iw)/2:(oh-ih)/2,tile=4x3"
+
+ffmpeg \
+  -y \
+  -framerate 1 \
+  -pattern_type glob \
+  -i "$FRAME_DIR/frame-*.jpg" \
+  -vf "$FILTER" \
+  -frames:v 1 \
+  "$OUT"
+```
 
 ## Interaction Log
 
 Keep a compact log while rehearsing and recording:
 
-- Capture scope: full display or specific window.
-- Window state: user-approved size/position, display, and whether coordinates
-  were revalidated after any change.
-- Starting state: app, URL/file, selected data, and visible panel/tab.
+- Capture scope: full display.
+- Window state: display, size, position, and coordinate validation.
+- Starting state: app, URL or file, selected data, and visible panel.
 - Rehearsal issues found and cleared.
-- Final interaction sequence: click coordinates or stable UI targets, pointer movement notes, typed text, waits, and stop action.
-- Recording result: whether the final take completed, the saved project path, the measured duration when relevant, and where Screen Studio left it.
-- Frame review result: contact sheet path, sampled timestamps, issues found, and whether the take is keeper or rejected.
-- Screen Studio project windows minimized before any subsequent recording.
+- Final action sequence: coordinates, helper commands, typed text, and waits.
+- Screen Studio project path and display-track duration.
+- Contact sheet path, sampled timestamps, and keeper or rejection result.
+- Screen Studio project windows minimized before subsequent recording.
 
 ## Recovery
 
-- If Screen Studio or macOS asks for screen recording, microphone, camera, or accessibility permission, stop and ask the user to grant it if automation cannot proceed.
-- If the wrong display/window is selected, cancel before recording and reselect the correct target.
-- If an unexpected modal appears during the final take, stop the recording, clear the modal, reset the starting state, run another test pass, and then record again.
-- If the target window is the wrong size or position, do not improvise the
-  final take. Ask the user to adjust it, then re-run coordinate calibration and
-  dry rehearsal.
+- If Screen Studio or macOS asks for recording, microphone, camera, or
+  accessibility permission, stop and ask the user to grant it.
+- If the wrong display is selected, cancel before recording and reselect the
+  correct display.
+- If the picker is on window or selected-area capture, press
+  `Command-Option-3` to switch back to full-display capture.
+- If an unexpected modal appears during the final take, stop recording, clear
+  the modal, reset the starting state, run another test pass, and record again.
+- If the target window is the wrong size or position, ask the user to adjust it,
+  then re-run coordinate calibration and dry rehearsal.
