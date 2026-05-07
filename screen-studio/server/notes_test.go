@@ -5,9 +5,23 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
+
+// assertNoKey decodes raw JSON into a map and fails the test if the named
+// top-level key is present. Use this rather than substring-matching on the
+// raw body so the assertion stays clear about its intent (key absence) and
+// can't be confused by string values that happen to contain the key name.
+func assertNoKey(t *testing.T, raw []byte, key string) {
+	t.Helper()
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		t.Fatalf("decode body for key-absence check: %v", err)
+	}
+	if _, ok := top[key]; ok {
+		t.Fatalf("body unexpectedly contains key %q: %s", key, string(raw))
+	}
+}
 
 // postNote is a tiny helper that submits a note to the test mux the same
 // way the page does, returning the assigned ID.
@@ -97,9 +111,7 @@ func TestSecondUpdateOmitsAlreadyConsumedNotes(t *testing.T) {
 	if len(resp.Notes) != 0 {
 		t.Fatalf("second update returned %d notes, want 0", len(resp.Notes))
 	}
-	if strings.Contains(string(raw), `"notes"`) {
-		t.Fatalf("second update body still contains 'notes' field: %s", string(raw))
-	}
+	assertNoKey(t, raw, "notes")
 }
 
 func TestGetStatusDoesNotReturnNotes(t *testing.T) {
@@ -112,9 +124,7 @@ func TestGetStatusDoesNotReturnNotes(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET /api/status: status = %d", w.Code)
 	}
-	if strings.Contains(w.Body.String(), `"notes"`) {
-		t.Fatalf("GET /api/status leaked notes field: %s", w.Body.String())
-	}
+	assertNoKey(t, w.Body.Bytes(), "notes")
 
 	resp, _ := postUpdate(t, mux, "consume")
 	if len(resp.Notes) != 1 {
