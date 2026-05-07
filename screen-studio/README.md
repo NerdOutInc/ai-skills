@@ -29,7 +29,7 @@ plan before the recording starts.
 
 **Have your screencast audio already recorded?** Attach the audio file
 to your request using the `screen-studio` skill. The agent will transcribe
-the audio to build a transcript and will generate the intial on-screen
+the audio to build a transcript and will generate the initial on-screen
 actions file based on what's being said in the audio file. You can then give
 the agent additional instructions like "scroll the product page while I'm
 talking about the product features," and it will know where that action goes
