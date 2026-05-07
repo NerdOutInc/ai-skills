@@ -98,6 +98,26 @@ func (ns *noteStore) markAllConsumed() int {
 	return count
 }
 
+// consumeUnread atomically marks every currently-unconsumed note as
+// consumed and returns snapshots of those notes (with ConsumedAt populated).
+// Used by the /api/status POST handler so a single update call doubles as a
+// note delivery: the agent gets the notes back in the response, and the page
+// sees them flip to "seen" on its next poll.
+func (ns *noteStore) consumeUnread() []Note {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
+	now := time.Now()
+	out := make([]Note, 0)
+	for i := range ns.items {
+		if ns.items[i].ConsumedAt == nil {
+			t := now
+			ns.items[i].ConsumedAt = &t
+			out = append(out, ns.items[i])
+		}
+	}
+	return out
+}
+
 func (ns *noteStore) clear() {
 	ns.mu.Lock()
 	defer ns.mu.Unlock()

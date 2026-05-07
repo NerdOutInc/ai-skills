@@ -229,6 +229,18 @@ codes the badge: red pulse for `recording`, amber for `preparing`, green for
 phase first transitions to `recording` and freezes when it leaves `recording`
 or `preparing`.
 
+**Every `update` response carries any unread notes from the page.** The JSON
+returned by `status-server update` looks like the regular status snapshot
+plus a top-level `notes` array of any notes the user has sent that the agent
+has not yet seen. Those notes are marked consumed server-side as part of the
+same call — the page badges flip from "queued for {{Agent}}" to "seen by
+{{Agent}}" on its next poll. **The agent must read the output of every
+`update` call and act on any notes it returns** before continuing. Do not
+redirect the output to `/dev/null`, swallow it with `2>&1 || true`, or
+otherwise drop it; if you do, the page will show "seen" while the agent has
+not actually seen the note. See [Notes from the user](#notes-from-the-user)
+for what "act on" means at each phase.
+
 ### When to update during the workflow
 
 The user is watching the page from another device. **Silence on the page reads
@@ -237,6 +249,13 @@ updates often enough that the page never goes more than ~30 seconds without a
 new line during active work. The exception is the final take itself, where
 updates correspond to scripted steps (one update per step, no thinking-out-loud
 narration that doesn't match a visible event).
+
+The same cadence also bounds how quickly the agent picks up notes the user
+sent from the page. Notes only surface in the response of an `update` call —
+this is **not** an async interrupt. If you don't push an update, the agent
+won't see the note. Treat the ~30-second silence rule as a hard ceiling on
+note latency too: any stretch of work longer than that needs at least one
+heartbeat update to flush the note channel.
 
 - **Server start:** push `phase=preparing` with the project name. Push
   `action="Reset stale state"` or similar so the first line on the page
@@ -267,12 +286,18 @@ narration that doesn't match a visible event).
 - **Final take start:** push `phase=recording` immediately after pressing
   `Return` to start Screen Studio. The pulse on the page is the user's
   confirmation the take actually began.
-- **Each scripted action during the take:** push one update per scripted
-  helper command — that's it. The take itself should NOT have the same
-  density of updates as dry runs; one entry per visible on-camera step
-  keeps the keeper-take log clean for the post-take debrief.
+- **Each scripted action during the take:** push one update **before** the
+  scripted helper command runs — that's the natural interrupt point. If the
+  user has just sent a note ("stop, the cursor is in the wrong spot") it
+  comes back in that response and the agent can abort or adjust before the
+  on-camera action fires. One update per visible on-camera step is still
+  enough density; the take log stays clean for the post-take debrief.
 - **Long waits:** push `action="Waiting for upload (N seconds)"` so the user
-  on the other device understands the apparent pause.
+  on the other device understands the apparent pause. Long waits are also
+  the highest-risk window for missed notes (no scripted action is firing,
+  so no update is naturally scheduled). If a wait is going to exceed ~30s,
+  push at least one mid-wait update so any note like "this is hung, stop"
+  reaches the agent.
 - **Stop:** push `phase=stopped` immediately after `Command-Control-Return`.
 - **Post-take verification and contact-sheet review:** keep updating the
   status server while verifying the recording. Contact-sheet analysis can take
@@ -301,57 +326,61 @@ locally and continue the take — the recording is the source of truth.
 The status page has a "Send a note to {{Agent}}" form. The user types
 observations or questions while watching the take from a phone or another
 device, and each note arrives at the server stamped with both wall-clock time
-and a **take-relative offset** (milliseconds since `started_at`). Notes are
-queued; the recording is **not** interrupted to acknowledge them.
+and a **take-relative offset** (milliseconds since `started_at`). Notes ride
+back to the agent on the next `update` response (see
+[Pushing status updates](#pushing-status-updates)) — there is no separate
+poll.
 
-Each note has two server-tracked states:
+Each note has two server-tracked states the page renders as a badge:
 
-- **queued** — user sent it, agent has not acknowledged it yet. Page shows
+- **queued** — user sent it, agent has not run an `update` yet. Page shows
   a green "queued for {{Agent}}" badge.
-- **consumed** (a.k.a. seen) — agent has fetched it and confirmed it. Page
-  shows a blue ✓ "seen by {{Agent}}" badge with the timestamp.
+- **consumed** (a.k.a. seen) — the agent ran an `update` that returned the
+  note. Page shows a blue ✓ "seen by {{Agent}}" badge with the timestamp.
 
-The CLI verb that flips queued → consumed is `notes --clear` — despite the
-name, this **does not delete** the notes; it just stamps `consumed_at` so
-the page can keep showing the user that {{Agent}} has seen them. Use
-`notes --purge` only when you want to truly wipe history. The default
-`notes` (no flags) lists only queued notes; pass `--all` to include
-already-consumed ones.
+The flip from queued → consumed happens automatically when the next
+`update` returns the note in its `notes` array. There is no separate
+"clear" step in the normal workflow.
 
-**When to poll for notes:**
+**Reading update output is mandatory.** Because `update` is what consumes
+notes, dropping its stdout is the same as ignoring the user. Capture and
+inspect the response on every call. The agent has not "seen" a note until
+it has actually parsed the JSON and read the `text` field.
 
-The agent must check for queued notes — and surface them in chat — at every
-natural pause in the workflow. Polling at these points reassures the user
-that their input was received, and gives the agent a chance to act on
-feedback before doing more work.
+**Responding by phase:**
 
-- **Between dry runs.** Before starting dry run N+1, run
-  `status-server notes --clear`, surface any new notes in chat, and decide
-  whether they affect the rehearsal plan (e.g. "you forgot to hide Codex" →
-  fix the window setup before the next dry run).
-- **Between attempted recordings.** After a take is stopped (whether kept,
-  rejected, or aborted) and before starting the next take, run
-  `status-server notes --clear` and address each note. A common case: the
-  user noticed a problem during the take that you should fix before the next
-  attempt.
-- **During a take, between scripted actions.** Poll with
-  `status-server notes --since-id <last_seen_id>` (no `--clear`) and silently
-  log them. **Do not type a chat reply mid-take** — keystrokes can corrupt
-  the recording (focus changes, audible noise, broken cursor scripts). The
-  page already shows the user a "📨 Queued for {{Agent}}" receipt; that is
-  the acknowledgement.
-- **Post-take debrief.** Run `status-server notes --clear --all`. The
-  `--all` includes notes already consumed earlier in the take cycle so the
-  debrief covers the whole take. Surface every note with:
+- **Before a take (server start, dry runs, between rehearsals, between
+  takes).** Surface every note returned by the update in chat. Quote the
+  text and act on it: fix the rehearsal plan, adjust window setup, answer
+  the question before the next dry run, etc. This is also where most notes
+  arrive in practice — the user is watching the prep and flagging things to
+  fix before recording.
+- **During a take (`phase=recording`).** Notes still come back on every
+  update. Act on directives immediately:
+  - "stop, this is broken" / "abort" → press `Command-Control-Return`,
+    push `phase=stopped --action "Aborted on user note"`, then surface the
+    note text in chat after the take has stopped.
+  - "skip this step" / "wait longer" → adjust the next scripted action.
+  - Questions or observations that don't require action → log silently and
+    answer in the post-take debrief.
+
+  **Do not type long chat replies while the take is still rolling** —
+  verbose narration adds focus changes and noise that can land in the
+  recording. Take the requested action, keep chat output to the minimum
+  needed to confirm it, and save the full response for after stop.
+- **Post-take debrief.** By the time the take has stopped, every note from
+  the run has already been delivered via update responses; the agent
+  already has them in conversation context. Surface each one in chat with:
   - The note text in a quote.
   - The take-relative offset formatted as `mm:ss`.
-  - A direct response: answer questions by inspecting the relevant frames in
-    the contact sheet at the matching timestamp; treat feedback as a request
-    that may justify a re-take.
+  - A direct response: answer questions by inspecting the relevant frames
+    in the contact sheet at the matching timestamp; treat feedback as a
+    request that may justify a re-take.
 
-Always `--clear` (mark consumed) when surfacing notes in chat — that flips
-the page badge from "queued" to "seen", letting the user know {{Agent}} got
-them.
+If the agent suspects an update response was lost (server was down, network
+hiccup, output got dropped), `status-server notes --all` is a manual
+fallback that re-lists every note on record (consumed and unconsumed). It
+does not change state. The primary path is still the `update` response.
 
 Sample post-take note debrief in chat:
 
@@ -751,9 +780,10 @@ During the take:
 After stopping:
 
 - Restore Codex.
-- Run `status-server notes --clear` and surface every note in chat with its
-  take-relative offset, answering questions and reacting to feedback. See
-  [Notes from the user](#notes-from-the-user).
+- Surface every note received during the take in chat, with its
+  take-relative offset, answering questions and reacting to feedback. The
+  notes have already arrived via update responses — no separate fetch is
+  needed. See [Notes from the user](#notes-from-the-user).
 - Push `phase=stopped` with `action="Starting post-take verification"` before
   inspecting files or frames.
 - Verify a fresh project exists in `~/Screen Studio Projects`, and push an
