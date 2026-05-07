@@ -88,19 +88,50 @@ On startup the server prints a banner block to stdout containing:
 **Sharing the page in chat:**
 
 1. Read the banner from the server's stdout.
-2. Reply with the URLs and PIN, then embed the QR PNG using a markdown image
-   link pointing at the file path from the banner. Example:
+2. Reply with the URLs and PIN, then embed the QR PNG inline after a short
+   `Scan:` label. In Codex chat this renders larger inline than a standalone
+   markdown image, while HTML image tags render as literal text. Use the file
+   path from the current banner. Example:
 
    ```markdown
    Recording status page is live. **PIN: 4827.**
-   - Scan: ![Screen Studio QR](/var/folders/xx/T/screen-studio-status-qr-8765-4827-abc.png)
+
+   Scan: ![Screen Studio QR](/var/folders/xx/T/screen-studio-status-qr-8765-4827-abc.png)
+
    - Bonjour: http://Brians-Mac-mini.local:8765/?pin=4827
    - LAN IP:  http://192.168.68.201:8765/?pin=4827
    ```
 
-3. **Do NOT reuse a QR PNG path from a previous server run.** The PIN changes
+3. If the QR still appears too small inline, use the local image viewer tool on
+   the QR PNG path with original detail; that renders the QR large in the
+   thread. Keep the URLs and PIN in the assistant message because tool-rendered
+   images may not be visible in every client.
+
+4. If a larger click-to-open image is useful, create a wide "QR card" PNG and
+   embed that card with the same `Scan:` markdown pattern. Preserve sharp
+   edges by scaling the QR with nearest-neighbor filtering:
+
+   ```bash
+   ffmpeg -y \
+     -i "$QR_PATH" \
+     -filter_complex "[0:v]scale=840:840:flags=neighbor[qr];color=white:s=1600x900[bg];[bg][qr]overlay=(W-w)/2:(H-h)/2" \
+     -frames:v 1 \
+     /tmp/screen-studio-status-qr-card.png
+   ```
+
+   Then embed:
+
+   ```markdown
+   Scan: ![Screen Studio QR](/tmp/screen-studio-status-qr-card.png)
+   ```
+
+5. After sending the status server info with the URLs, PIN, and QR code, pause
+   for **20 seconds** before starting the first dry run or any recording setup.
+   This gives the user time to scan the code and open the status page on a
+   second device.
+6. **Do NOT reuse a QR PNG path from a previous server run.** The PIN changes
    on restart, and a stale QR image sends the user to an old `?pin=` URL.
-4. **Do NOT try to repeat the ASCII QR from the banner in chat.** Most chat
+7. **Do NOT try to repeat the ASCII QR from the banner in chat.** Most chat
    clients use a different font and line width than the terminal, so the
    blocks rearrange and the code stops scanning. Always embed the PNG file
    from the banner instead.
@@ -205,6 +236,21 @@ narration that doesn't match a visible event).
 - **Long waits:** push `action="Waiting for upload (N seconds)"` so the user
   on the other device understands the apparent pause.
 - **Stop:** push `phase=stopped` immediately after `Command-Control-Return`.
+- **Post-take verification and contact-sheet review:** keep updating the
+  status server while verifying the recording. Contact-sheet analysis can take
+  long enough to look stalled from the second screen, so push one action before
+  each meaningful verification step and each finding, e.g.:
+
+  ```bash
+  status-server update --phase stopped --action "Measuring display-track duration"
+  status-server update --phase stopped --action "Generating timestamp contact sheet"
+  status-server update --phase stopped --action "Inspecting frame 0:45 for search result state"
+  status-server update --phase stopped --action "Checking final frame for expected hold"
+  status-server update --phase stopped --action "Frame review passed; take looks like a keeper"
+  ```
+
+  The final status update before stopping the server must be the verdict:
+  whether the recording looks like a keeper or must be rejected/retaken.
 - **Errors / takes rejected after frame review:** push `phase=error` with a
   short reason (e.g. `action="Rejected: Codex visible in frame 90"`).
 
@@ -282,10 +328,11 @@ Sample post-take note debrief in chat:
 
 ### Stopping the server
 
-Leave the server running across multiple takes in a session. Stop it at the
-end of the session with `kill %1` (or whatever job control matches how it was
-started). The state is in-memory only; a restart resets the page to `idle`
-with an empty log.
+Leave the server running across multiple takes in a session. Before stopping it
+at the end of the session, push a final verdict update that says whether the
+latest recording is a keeper or why it is rejected. Then stop the server with
+`kill %1` (or whatever job control matches how it was started). The state is
+in-memory only; a restart resets the page to `idle` with an empty log.
 
 ### Hard gate addition
 
@@ -668,21 +715,33 @@ After stopping:
 - Run `status-server notes --clear` and surface every note in chat with its
   take-relative offset, answering questions and reacting to feedback. See
   [Notes from the user](#notes-from-the-user).
-- Verify a fresh project exists in `~/Screen Studio Projects`.
+- Push `phase=stopped` with `action="Starting post-take verification"` before
+  inspecting files or frames.
+- Verify a fresh project exists in `~/Screen Studio Projects`, and push an
+  update naming the project found.
 - Verify the display track exists, usually at:
 
   ```text
   recording/channel-1-display-0.mp4
   ```
 
-- Measure duration with `ffprobe`. Treat duration as informational unless the
+- Measure duration with `ffprobe`. Push an update before measuring and another
+  update with the measured duration. Treat duration as informational unless the
   user explicitly asked for live sync.
-- Generate and inspect a timestamp-based contact sheet.
+- Generate and inspect a timestamp-based contact sheet. Push an update before
+  generation, after the sheet path is known, and while inspecting frames. If
+  you open or extract focused frames from a timestamp, push an update with the
+  timestamp and what you are checking.
 - Reject the take if sampled frames show missing actions, wrong state, Codex,
   stale Screen Studio windows, wrong query text, address-bar suggestions,
   failed saves, missing connectors, or an incorrect final hold.
 - Do not reject a complete take just because waits make it longer than the
   audio.
+- Before stopping the status server, push one final verdict update. Use
+  `phase=stopped` for a keeper verdict, e.g.
+  `action="Frame review passed; take looks like a keeper"`, or `phase=error`
+  for a rejected take, e.g.
+  `action="Rejected: missing final confirmation frame"`.
 - Leave Screen Studio at the saved project state. Minimize the resulting project
   window before any additional recording.
 
