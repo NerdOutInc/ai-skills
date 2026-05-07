@@ -24,7 +24,18 @@ on intent:
 
 Example: `/screen-studio` then "record a screencast of the checkout flow."
 
-The skill captures the **full display only** — window or selected-area
+You can continue to work with the agent to come up with a full action
+plan before the recording starts.
+
+**Have your screencast audio already recorded?** Attach the audio file
+to your request using the `screen-studio` skill. The agent will transcribe
+the audio to build a transcript and will generate the intial on-screen
+actions file based on what's being said in the audio file. You can then give
+the agent additional instructions like "scroll the product page while I'm
+talking about the product features," and it will know where that action goes
+in the recording sequence because it knows when you said it.
+
+> The skill captures the **full display only** — window or selected-area
 capture is out of scope.
 
 A typical session:
