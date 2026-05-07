@@ -14,6 +14,42 @@ The full agent instructions live in [`SKILL.md`](SKILL.md).
 npx skills add https://github.com/NerdOutInc/ai-skills --skill screen-studio
 ```
 
+## Usage
+
+Invoke the skill explicitly when you want to record — it does not auto-load
+on intent:
+
+- **Claude Code:** type `/screen-studio` and then describe the recording.
+- **Codex:** type `$screen-studio` and then describe the recording.
+
+Example: `/screen-studio` then "record a screencast of the checkout flow."
+
+The skill captures the **full display only** — window or selected-area
+capture is out of scope.
+
+A typical session:
+
+1. **Status server starts.** The agent shares a QR code, PIN, and
+   Bonjour/LAN URL — scan it with your phone to monitor the take live on a
+   second device. See [Recording status server](#recording-status-server)
+   below.
+2. **Dry runs.** At least two rehearsals without recording, so the agent
+   can lock in coordinates, waits, and the visible action sequence before
+   committing to a keeper.
+3. **Keeper take.** The agent drives Screen Studio with the recording
+   keyboard shortcut and runs the rehearsed steps. While recording, you
+   can send timestamped notes from your phone (e.g. "the cursor moved too
+   fast at 0:42") and the agent will answer them during the post-take
+   debrief.
+4. **Verification.** After stopping, the agent measures the display track
+   with `ffprobe`, generates a timestamp contact sheet, and reviews frames
+   before declaring the take a keeper or rejecting it.
+5. **Output.** Recordings land in `~/Screen Studio Projects/`. The agent
+   does **not** trim, export, or upload unless you explicitly ask.
+
+For the full agent-facing protocol — exact shortcuts, status server CLI,
+note polling cadence — see [`SKILL.md`](SKILL.md).
+
 ## Recording status server
 
 ![Screen Studio recording status page on mobile, two views side by side: live recording state with sent notes on the left, recent actions and QR code with PIN on the right](../docs/screen-studio-preview.png)

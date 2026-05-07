@@ -1,4 +1,7 @@
 interface:
   display_name: "Record Screen Studio Screencasts"
   short_description: "Capture repeatable Screen Studio recordings"
-  default_prompt: "Use $record-screen-studio-screencasts to record a polished screencast with Screen Studio."
+  default_prompt: "Use $screen-studio to record a polished screencast with Screen Studio."
+
+policy:
+  allow_implicit_invocation: false

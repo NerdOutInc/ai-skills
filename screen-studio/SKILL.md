@@ -1,34 +1,38 @@
 ---
 name: screen-studio
+disable-model-invocation: true
 description: >
-  Record repeatable macOS full-display screencasts with Screen Studio. Use when
-  Codex is asked to capture a full-display screen recording, record a web app or
-  product demo, rehearse a Screen Studio take, start or stop Screen Studio
-  recording, use Helium for clean web recordings, run test takes, or document
-  exact click locations before a final recording. This skill does not support
-  window or selected-area capture.
+  Record repeatable macOS full-display screencasts with Screen Studio. Covers
+  the full workflow: setup, dry runs, keeper recording, and post-take
+  verification. Use when asked to capture a screen recording, record a product
+  demo, or run Screen Studio takes. Does not support window or selected-area
+  capture.
 ---
 
 # Record Screen Studio Screencasts
 
 ## Scope
 
-Use Screen Studio for recording. This skill records the full display only. Do
+**Recording tool and capture mode.** Use Screen Studio for recording. This skill records the full display only. Do
 not offer or use window capture or selected-area capture. Do not export, trim,
-upload, or edit the video unless the user explicitly asks.
+upload, or edit the video yourself unless the user explicitly asks. (The user
+may trim or retime footage in post-production on their own.)
 
-Use desktop automation for Screen Studio, Helium, and the target app. Computer
+**Automation boundaries.** Use desktop automation for Screen Studio, Helium, and the target app. Computer
 Use is acceptable for inspection and off-camera setup, but do not use Computer
 Use to start or stop Screen Studio for a keeper take. Its cursor overlay can
 appear in the captured screen.
 
-Use browser automation only for setup or verification inside a page. The actual
-screencast should be captured from the visible app or Helium window.
+Browser automation (DOM clicks, invisible scripting) is acceptable for
+off-camera setup or verification inside a page, but must not be used for
+keeper-take interactions unless the user explicitly wants an automated-looking
+capture. The actual screencast should be captured from the visible app or
+Helium window.
 
-Audio timing is not required. Treat audio duration as a guide to the expected
+**Timing.** Audio timing is not required. Treat audio duration as a guide to the expected
 story beats. The recording just needs to capture each required action clearly.
-If the UI needs time to load, index, upload, or respond, wait. The user can
-trim or retime the footage to match narration after recording.
+If the UI needs time to load, index, upload, or respond, wait. Post-production
+timing adjustments are the user's responsibility.
 
 ## Hard Gates
 
@@ -587,9 +591,8 @@ is speaking unless the cursor movement is the story.
 
 Prefer visible cursor movement for clicks and focus changes. Use AppleScript,
 keyboard shortcuts, or app-native typing when they look natural and avoid
-brittle pointer work. Do not rely on browser automation, DOM clicks, or
-invisible scripting for keeper interactions unless the user explicitly wants an
-automated-looking capture.
+brittle pointer work. For keeper interactions, follow the browser-automation
+rule in the Scope section above.
 
 For visible typing, type a little slower than normal automation. Prefer paced
 keystrokes over instant paste unless typing is not part of the demo.
