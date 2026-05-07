@@ -73,6 +73,17 @@ type updatePayload struct {
 	ClearTime bool    `json:"clear_started_at,omitempty"`
 }
 
+// updateResponse is the body returned by POST/PUT/PATCH /api/status. It
+// embeds the current Status and adds any notes the agent had not yet
+// consumed, marked consumed as part of this same call. The agent reads the
+// Notes field on every update so it cannot miss a queued note. GET
+// /api/status returns just Status — notes are only carried out by the
+// updating client that consumed them.
+type updateResponse struct {
+	Status
+	Notes []Note `json:"notes,omitempty"`
+}
+
 func (st *store) apply(p updatePayload) Status {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -206,6 +217,38 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// installStatusRoute wires the /api/status handler onto mux. GET returns the
+// current Status. POST/PUT/PATCH applies the update payload, atomically
+// consumes any unread notes, and returns updateResponse so the same call
+// delivers the notes to the agent — no separate poll is required.
+func installStatusRoute(mux *http.ServeMux, st *store, ns *noteStore) {
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, st.snapshot())
+		case http.MethodPost, http.MethodPut, http.MethodPatch:
+			body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64*1024))
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			var p updatePayload
+			if len(body) > 0 {
+				if err := json.Unmarshal(body, &p); err != nil {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json: " + err.Error()})
+					return
+				}
+			}
+			status := st.apply(p)
+			notes := ns.consumeUnread()
+			writeJSON(w, http.StatusOK, updateResponse{Status: status, Notes: notes})
+		default:
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+}
+
 func runServer(port int, pinOverride, agentName string) error {
 	st := newStore()
 	ns := newNoteStore()
@@ -230,29 +273,7 @@ func runServer(port int, pinOverride, agentName string) error {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			writeJSON(w, http.StatusOK, st.snapshot())
-		case http.MethodPost, http.MethodPut, http.MethodPatch:
-			body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64*1024))
-			if err != nil {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-				return
-			}
-			var p updatePayload
-			if len(body) > 0 {
-				if err := json.Unmarshal(body, &p); err != nil {
-					writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json: " + err.Error()})
-					return
-				}
-			}
-			writeJSON(w, http.StatusOK, st.apply(p))
-		default:
-			w.Header().Set("Allow", "GET, POST")
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
+	installStatusRoute(mux, st, ns)
 
 	mux.HandleFunc("/api/lan", func(w http.ResponseWriter, r *http.Request) {
 		ips := lanIPs()
@@ -568,9 +589,14 @@ func usage() {
 Usage:
   status-server [serve] [--port N] [--pin XXXX] [--agent NAME]
                                                   start HTTP server (default port %d)
-  status-server update [flags]                    POST a status update to a running server
-  status-server status [flags]                    GET the current status JSON
-  status-server notes  [flags]                    GET pending notes from the page
+  status-server update [flags]                    POST a status update to a running server.
+                                                  The response embeds the current status AND a
+                                                  "notes" array of any unread notes from the page,
+                                                  which are marked consumed in the same call. The
+                                                  agent must read this output before continuing.
+  status-server status [flags]                    GET the current status JSON (no note delivery).
+  status-server notes  [flags]                    GET pending notes from the page (manual fallback;
+                                                  the primary path is the notes returned by update).
 
 Update flags:
   --host HOST                server host (default 127.0.0.1)
