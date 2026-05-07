@@ -27,13 +27,10 @@ npx skills add https://github.com/NerdOutInc/ai-skills --list
 
 ## Available Skills
 
-### screen-studio
+### [screen-studio](screen-studio/README.md)
 
-`screen-studio` helps agents record polished, repeatable macOS screencasts with
-[Screen Studio](https://screen.studio). It guides capture-scope selection, clean
+The `screen-studio` skill helps agents record polished, repeatable macOS screencasts
+with [Screen Studio](https://screen.studio). It guides capture-scope selection, clean
 Helium browser setup for web demos, scripted dry runs, coordinate calibration
 with `cliclick`, Screen Studio shortcut usage, smoke captures, and keeper-take
 verification with tools such as `ffprobe` and timestamp contact sheets.
-
-See [`screen-studio/README.md`](screen-studio/README.md) for a feature
-overview, dependency list, and links into the agent instructions.
