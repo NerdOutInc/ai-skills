@@ -243,7 +243,7 @@ func installStatusRoute(mux *http.ServeMux, st *store, ns *noteStore) {
 			notes := ns.consumeUnread()
 			writeJSON(w, http.StatusOK, updateResponse{Status: status, Notes: notes})
 		default:
-			w.Header().Set("Allow", "GET, POST")
+			w.Header().Set("Allow", "GET, POST, PUT, PATCH")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
