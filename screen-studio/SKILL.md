@@ -64,14 +64,22 @@ It has zero runtime dependencies (no Python, Node, Go, or Homebrew needed).
 ### Starting the server
 
 Run the binary in the background and bind to all interfaces (the binary already
-binds `0.0.0.0` by default):
+binds `0.0.0.0` by default). **Always pass `--agent` with your own name** so
+the page UI says "Send a note to Codex" / "queued for Claude" instead of the
+generic fallback "the agent":
 
 ```bash
-"$SKILL_DIR/server/status-server" --port 8765 &
+"$SKILL_DIR/server/status-server" --port 8765 --agent Codex &
 ```
 
+Use the name of the chat agent you are running as: `Codex` for Codex,
+`Claude` for Claude Code, etc. The `--agent` flag accepts spaces if quoted
+(e.g. `--agent "Claude Code"`).
+
 `$SKILL_DIR` is the path to this skill's directory. The default port is `8765`;
-pass `--port N` to change it.
+pass `--port N` to change it. If `--agent` is omitted, the page falls back to
+the literal string "the agent" — this is the giveaway that the flag was
+forgotten on startup.
 
 On startup the server prints a banner block to stdout containing:
 
@@ -96,10 +104,9 @@ On startup the server prints a banner block to stdout containing:
    ```markdown
    Recording status page is live. **PIN: 4827.**
 
-   Scan: ![Screen Studio QR](/var/folders/xx/T/screen-studio-status-qr-8765-4827-abc.png)
-
+   - Scan: ![Screen Studio QR](/var/folders/xx/T/screen-studio-status-qr-8765-4827-abc.png)
    - Bonjour: http://Brians-Mac-mini.local:8765/?pin=4827
-   - LAN IP:  http://192.168.68.201:8765/?pin=4827
+   - LAN IP: http://192.168.68.201:8765/?pin=4827
    ```
 
 3. If the QR still appears too small inline, use the local image viewer tool on
@@ -131,10 +138,37 @@ On startup the server prints a banner block to stdout containing:
    second device.
 6. **Do NOT reuse a QR PNG path from a previous server run.** The PIN changes
    on restart, and a stale QR image sends the user to an old `?pin=` URL.
-7. **Do NOT try to repeat the ASCII QR from the banner in chat.** Most chat
-   clients use a different font and line width than the terminal, so the
-   blocks rearrange and the code stops scanning. Always embed the PNG file
-   from the banner instead.
+7. **Chat clients vs. terminal clients — pick the right QR format.**
+   - **Chat clients (Codex Desktop, web UIs, etc.):** always embed the PNG
+     via the `Scan: ![...](path)` markdown above. Do **not** paste the
+     half-block ASCII QR from the banner — most chat clients use a
+     proportional or differently-spaced monospace font and the blocks
+     rearrange so the code stops scanning.
+   - **Terminal clients (Claude Code in Terminal.app/iTerm2, SSH sessions,
+     anything where the markdown image embed renders as a literal path
+     instead of an actual image):** the half-block ASCII QR from the banner
+     *is* the right answer. Paste it verbatim inside a fenced code block so
+     the renderer keeps it monospace and doesn't re-wrap it. Example:
+
+     ````markdown
+     Recording status page is live. **PIN: 4827.**
+
+     - Bonjour: http://Brians-Mac-mini.local:8765/?pin=4827
+     - LAN IP:  http://192.168.68.201:8765/?pin=4827
+
+     Scan with your phone:
+
+     ```
+     <paste the half-block ASCII QR block from the banner here, exactly as
+     printed — preserve leading spaces and line breaks>
+     ```
+     ````
+
+     The half-block format (▀▄█) renders square-ish in any standard
+     monospace font and scans well from a few feet away. If the user reports
+     the code won't scan, the next fallback is `open <qr-png-path>` (macOS
+     only) which launches Preview with the actual image — this always works
+     when a GUI is available.
 
 The PIN auto-applies on first load via the URL query, then the page stores it
 as a cookie and strips it from the address bar. Localhost requests from the
@@ -251,6 +285,7 @@ narration that doesn't match a visible event).
 
   The final status update before stopping the server must be the verdict:
   whether the recording looks like a keeper or must be rejected/retaken.
+
 - **Errors / takes rejected after frame review:** push `phase=error` with a
   short reason (e.g. `action="Rejected: Codex visible in frame 90"`).
 
@@ -514,6 +549,7 @@ Keeper takes should move the actual macOS pointer at a human pace.
 
   Click the `cliclick_x,cliclick_y` value, then take another screenshot to
   verify the expected UI state.
+
 - Apple Vision finds visible text, not arbitrary UI structure:
   - For links, sidebar items, menu items, buttons with text, labels, and
     placeholder text, use Apple Vision directly on the visible text.
