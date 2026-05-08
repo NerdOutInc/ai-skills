@@ -1,0 +1,104 @@
+{
+  "output": "/tmp/narrated-screencast-editor/paperless-ngx-case-study.mp4",
+  "inputs": {
+    "video": "/Users/brian/github/nerdoutinc/paperless-ag/videos/src/01-what-is-paperless.mp4",
+    "audio": "/Users/brian/github/nerdoutinc/paperless-ag/videos/src/01-what-is-paperless-ngx.m4a"
+  },
+  "timeline": {
+    "width": 3600,
+    "height": 2160,
+    "fps": 60,
+    "segments": [
+      {
+        "type": "video",
+        "start": 0,
+        "end": 0.016667,
+        "setpts_multiplier": 1,
+        "clone_pad_after": 0.983333
+      },
+      {
+        "type": "video",
+        "start": 0,
+        "end": 8,
+        "setpts_multiplier": 2.46
+      },
+      {
+        "type": "video",
+        "start": 8,
+        "end": 10,
+        "setpts_multiplier": 2.02
+      },
+      {
+        "type": "video",
+        "start": 10,
+        "end": 13.2,
+        "setpts_multiplier": 1.025
+      },
+      {
+        "type": "video",
+        "start": 13.2,
+        "end": 17,
+        "setpts_multiplier": 1.126315789
+      },
+      {
+        "type": "video",
+        "start": 17,
+        "end": 28.5,
+        "setpts_multiplier": 0.765217391
+      },
+      {
+        "type": "freeze",
+        "path": "/Users/brian/Documents/Codex/2026-05-07/can-you-edit-video/analysis/freeze-note-list-4k.png",
+        "duration": 11.88
+      },
+      {
+        "type": "video",
+        "start": 28.5,
+        "end": 39.6,
+        "setpts_multiplier": 1.214414414
+      },
+      {
+        "type": "video",
+        "start": 39.6,
+        "end": 48.716667,
+        "setpts_multiplier": 2.070018333,
+        "clone_pad_after": 1
+      }
+    ],
+    "intro": {
+      "path": "/Users/brian/Documents/Codex/2026-05-07/can-you-edit-video/analysis/title-card-redesign/website-wheat-options/intro-website-wheat-option-B.png",
+      "duration": 4,
+      "fade_duration": 1,
+      "offset": 3
+    },
+    "outro": {
+      "path": "/Users/brian/Documents/Codex/2026-05-07/can-you-edit-video/analysis/title-card-redesign/website-wheat-options/outro-website-wheat-option-B.png",
+      "duration": 3.871552,
+      "fade_duration": 1,
+      "offset": 88.311668
+    },
+    "overlays": [
+      {
+        "path": "/Users/brian/Documents/Codex/2026-05-07/can-you-edit-video/analysis/hq-patch/clean35-tooltip-green-alpha-4k.png",
+        "start": 35.7,
+        "end": 55.8,
+        "x": 0,
+        "y": 0
+      }
+    ]
+  },
+  "profiles": {
+    "preview": {
+      "preset": "veryfast",
+      "crf": 28,
+      "scale_width": 1280,
+      "audio_codec": "aac",
+      "audio_bitrate": "128k"
+    },
+    "hq": {
+      "preset": "slow",
+      "crf": 18,
+      "audio_codec": "copy"
+    }
+  }
+}

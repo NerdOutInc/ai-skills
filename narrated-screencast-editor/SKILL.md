@@ -1,0 +1,99 @@
+---
+name: narrated-screencast-editor
+description: >
+  Edit narrated screencasts by syncing existing narration to screen actions,
+  retiming footage, adding branded title and outro cards, inserting freeze
+  frames, patching visual artifacts such as hover tooltips, and rendering
+  preview or high-quality MP4 outputs. Use when asked to combine a voiceover
+  with existing screen recording footage or polish a screencast edit.
+---
+
+# Narrated Screencast Editor
+
+Use this skill when the user has an existing screencast and narration audio and
+wants them turned into a cohesive edited video. The default workflow is
+iterative: inspect first, generate a low-quality preview for timing review, then
+render the high-quality final only after the user accepts the edit.
+
+## Workflow
+
+The workflow has three phases: **Inspect**, **Edit**, and **Render**.
+Follow each phase in order.
+
+### Phase 1 — Inspect
+
+1. Inspect all media with `ffprobe` or `scripts/probe_media.py`.
+   - Capture source duration, resolution, frame rate, codec, bitrate, audio
+     duration, and whether the source has embedded audio.
+   - Preserve the source resolution and frame rate for HQ unless the user
+     explicitly requests downscaling or upscaling.
+
+### Phase 2 — Edit
+
+2. Build a timing map.
+   - Mark narration beats and the matching screen actions.
+   - If narration and screen actions do not align, notify the user and suggest
+     adjustments to either the narration or the video.
+   - Identify long waits that can be sped up, actions that need more breathing
+     room, and places where a freeze frame communicates better than raw waiting.
+   - Keep a simple table of source time, output time, action, narration cue,
+     and edit operation.
+
+3. Create supporting stills.
+   - Generate title and outro cards with `scripts/render_title_cards.py`.
+   - Extract clean freeze frames with `ffmpeg` or `scripts/extract_review_frames.py`.
+   - When a hover title, cursor artifact, toast, or other blemish persists, use
+     `scripts/make_overlay_patch.py` to build a transparent patch from a clean
+     frame.
+
+### Phase 3 — Render
+
+4. Render a preview first.
+   - Use `scripts/render_screencast.py --profile preview`.
+   - Share the preview path and ask the user to review timing, text, fades, and
+     patched areas.
+   - Expect several rounds of small timing/design adjustments.
+
+5. Render HQ after approval.
+   - Use `scripts/render_screencast.py --profile hq`.
+   - Prefer H.264, `-preset slow`, `-crf 18`, original FPS, `yuv420p`, and audio
+     stream copy when the audio is already MP4-compatible.
+   - Use `-movflags +faststart` for shareable MP4 output.
+
+6. Verify the final.
+   - Probe the final file.
+   - Generate a contact sheet around intros, fades, patches, important actions,
+     and the outro.
+   - Inspect visually before calling the render finished.
+
+## Hard Rules
+
+- Never overwrite the user's original video or audio.
+- Keep large generated media out of the skill repository.
+- Put preview renders, final renders, extracted frames, and temporary cards in
+  a user-specified output directory.
+- Before rendering HQ, show or describe the preview result and confirm the user
+  likes the timing and title card design.
+- Print generated `ffmpeg` commands before running them so the edit is
+  explainable and recoverable.
+- If replacing a visual artifact with a static patch, verify alignment at the
+  first, middle, and last affected timestamps.
+
+## Bundled Helpers
+
+- `scripts/probe_media.py`: summarize source video/audio metadata.
+- `scripts/extract_review_frames.py`: extract timestamped frames and contact
+  sheets for review.
+- `scripts/render_title_cards.py`: generate simple branded intro/outro PNGs.
+- `scripts/make_overlay_patch.py`: create transparent PNG overlays from clean
+  and dirty frames.
+- `scripts/render_screencast.py`: render preview/HQ MP4 files from an edit spec.
+
+Read the references when needed:
+
+- `references/workflow.md` for the full editing process.
+- `references/edit-spec.md` for the JSON render-spec schema.
+- `references/quality-and-compression.md` for encode choices and file size
+  tradeoffs.
+- `references/paperless-ngx-case-study.md` for the worked Fullstack AG /
+  Paperless NGX example.
