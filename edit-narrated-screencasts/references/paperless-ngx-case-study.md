@@ -1,17 +1,26 @@
 # Paperless NGX Case Study
 
 This case study records the workflow used for the Fullstack AG Paperless NGX
-narrated screencast. It intentionally references the original local media and
-analysis artifacts rather than copying large files into this skill.
+narrated screencast. It is a worked example, not a runnable tutorial: it
+references local media that lives on the original author's machine. The
+example spec under `assets/examples/fullstack-ag/` substitutes environment
+variables for the absolute paths so it can be inspected (and `--dry-run`'d)
+without those files.
 
-## Source Media
+## Source Media (placeholder env vars)
 
-- Source video:
-  `/Users/brian/github/nerdoutinc/paperless-ag/videos/src/01-what-is-paperless.mp4`
-- Narration:
-  `/Users/brian/github/nerdoutinc/paperless-ag/videos/src/01-what-is-paperless-ngx.m4a`
-- Final accepted render:
-  `/Users/brian/github/nerdoutinc/paperless-ag/videos/01-what-is-paperless-ngx.mp4`
+The example spec uses these environment variables. Set them to your own files
+to run the spec end-to-end:
+
+| Env var | Original role |
+| --- | --- |
+| `$PAPERLESS_SOURCE_VIDEO` | Source screencast (3600x2160, 60 fps, ~48.7s). |
+| `$PAPERLESS_NARRATION` | Narration m4a (~92.18s). |
+| `$PAPERLESS_FREEZE_DOC_LIST` | Clean document-list freeze frame, 4K. |
+| `$PAPERLESS_INTRO_CARD` | Rendered intro PNG (4K). |
+| `$PAPERLESS_OUTRO_CARD` | Rendered outro PNG (4K). |
+| `$PAPERLESS_TOOLTIP_PATCH` | Transparent overlay PNG hiding the tooltip and green artifact. |
+| `$PAPERLESS_OUTPUT` | Output path for the rendered MP4. |
 
 Observed source facts:
 
@@ -81,3 +90,6 @@ python3 "$SKILL_DIR/scripts/render_screencast.py" \
   --profile hq \
   --dry-run
 ```
+
+Set the `$PAPERLESS_*` env vars (see the table above) before running the
+spec without `--dry-run`.

@@ -1,5 +1,5 @@
 ---
-name: narrated-screencast-editor
+name: edit-narrated-screencasts
 description: >
   Edit narrated screencasts by syncing existing narration to screen actions,
   retiming footage, adding branded title and outro cards, inserting freeze
@@ -8,7 +8,7 @@ description: >
   with existing screen recording footage or polish a screencast edit.
 ---
 
-# Narrated Screencast Editor
+# Edit Narrated Screencasts
 
 Use this skill when the user has an existing screencast and narration audio and
 wants them turned into a cohesive edited video. The default workflow is
@@ -40,7 +40,10 @@ Follow each phase in order.
      and edit operation.
 
 3. Create supporting stills.
-   - Generate title and outro cards with `scripts/render_title_cards.py`.
+   - Generate brand-specific title and outro cards. The bundled
+     `scripts/render_fullstack_ag_cards.py` is the Fullstack AG card renderer;
+     copy it as a starting point for other brands. See
+     `references/title-cards.md` for guidance.
    - Extract clean freeze frames with `ffmpeg` or `scripts/extract_review_frames.py`.
    - When a hover title, cursor artifact, toast, or other blemish persists, use
      `scripts/make_overlay_patch.py` to build a transparent patch from a clean
@@ -57,7 +60,7 @@ Follow each phase in order.
 5. Render HQ after approval.
    - Use `scripts/render_screencast.py --profile hq`.
    - Prefer H.264, `-preset slow`, `-crf 18`, original FPS, `yuv420p`, and audio
-     stream copy when the audio is already MP4-compatible.
+     stream copy when the audio is already AAC (m4a/MP4-compatible).
    - Use `-movflags +faststart` for shareable MP4 output.
 
 6. Verify the final.
@@ -78,13 +81,22 @@ Follow each phase in order.
   explainable and recoverable.
 - If replacing a visual artifact with a static patch, verify alignment at the
   first, middle, and last affected timestamps.
+- Confirm the narration's leading silence matches `intro.duration -
+  intro.fade_duration`. The narration plays from output time `0`, so if the
+  intro card is 4s with a 1s fade, the m4a should start with ~3s of silence.
+  See `references/edit-spec.md` for details.
+- Ask before installing dependencies. The scripts need `ffmpeg`/`ffprobe` and
+  Pillow; if either is missing, ask the user before installing rather than
+  running `brew install` or `pip install` unprompted.
 
 ## Bundled Helpers
 
 - `scripts/probe_media.py`: summarize source video/audio metadata.
 - `scripts/extract_review_frames.py`: extract timestamped frames and contact
   sheets for review.
-- `scripts/render_title_cards.py`: generate simple branded intro/outro PNGs.
+- `scripts/render_fullstack_ag_cards.py`: generate Fullstack AG branded
+  intro/outro PNGs. Macos-only font lookup; treat as a template for other
+  brands rather than a generic card renderer (see `references/title-cards.md`).
 - `scripts/make_overlay_patch.py`: create transparent PNG overlays from clean
   and dirty frames.
 - `scripts/render_screencast.py`: render preview/HQ MP4 files from an edit spec.
@@ -93,6 +105,7 @@ Read the references when needed:
 
 - `references/workflow.md` for the full editing process.
 - `references/edit-spec.md` for the JSON render-spec schema.
+- `references/title-cards.md` for the title-card script convention.
 - `references/quality-and-compression.md` for encode choices and file size
   tradeoffs.
 - `references/paperless-ngx-case-study.md` for the worked Fullstack AG /

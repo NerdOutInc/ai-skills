@@ -215,7 +215,10 @@ def render_card(card: dict[str, Any], config: dict[str, Any], base_dir: Path, ou
     if not output:
         output = base_dir / f"{card.get('name', 'card')}.png"
     output.parent.mkdir(parents=True, exist_ok=True)
-    image.convert("RGB").save(output, quality=95)
+    save_kwargs: dict[str, Any] = {}
+    if output.suffix.lower() in {".jpg", ".jpeg"}:
+        save_kwargs["quality"] = 95
+    image.convert("RGB").save(output, **save_kwargs)
     print(f"Rendered {card.get('name', 'card')}: {output}")
     return output
 

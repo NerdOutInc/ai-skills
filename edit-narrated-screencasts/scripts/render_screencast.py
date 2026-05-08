@@ -34,6 +34,89 @@ DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
 }
 
 
+def detect_audio_codec(path: Path) -> str | None:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return None
+    try:
+        result = subprocess.run(
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_name",
+                "-of",
+                "default=nk=1:nw=1",
+                str(path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return None
+    return result.stdout.strip() or None
+
+
+def detect_video_size(path: Path) -> tuple[int, int] | None:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe or not path.exists():
+        return None
+    try:
+        result = subprocess.run(
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=p=0:s=x",
+                str(path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return None
+    raw = result.stdout.strip()
+    if "x" not in raw:
+        return None
+    width_text, height_text = raw.split("x", 1)
+    try:
+        width = int(width_text)
+        height = int(height_text)
+    except ValueError:
+        return None
+    if width <= 0 or height <= 0:
+        return None
+    return width, height
+
+
+def ensure_timeline_canvas(spec: dict[str, Any], source_video: Path | None) -> None:
+    timeline = spec.setdefault("timeline", {})
+    width = timeline.get("width")
+    height = timeline.get("height")
+    if width and height:
+        return
+
+    detected = detect_video_size(source_video) if source_video else None
+    if not detected:
+        return
+
+    detected_width, detected_height = detected
+    if not width:
+        timeline["width"] = detected_width
+    if not height:
+        timeline["height"] = detected_height
+
+
 def resolve_path(value: str | None, base: Path) -> Path | None:
     if not value:
         return None
@@ -266,6 +349,7 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     source_video = resolve_path(inputs.get("video"), base_dir)
     source_audio = resolve_path(inputs.get("audio"), base_dir)
     require_file(source_video, "inputs.video", dry_run)
+    ensure_timeline_canvas(spec, source_video)
     video_index = builder.add_input(source_video)
 
     audio_index: int | None = None
@@ -300,9 +384,20 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
 
     if audio_index is not None:
         audio_codec = str(profile.get("audio_codec", "copy"))
+        audio_bitrate = profile.get("audio_bitrate")
+        if audio_codec == "copy" and source_audio and not dry_run:
+            detected = detect_audio_codec(source_audio)
+            if detected and detected != "aac":
+                print(
+                    f"# Audio is {detected}, not AAC; switching from copy to aac for MP4 compatibility.",
+                    file=sys.stderr,
+                )
+                audio_codec = "aac"
+                if not audio_bitrate:
+                    audio_bitrate = "192k"
         cmd.extend(["-c:a", audio_codec])
-        if audio_codec != "copy" and profile.get("audio_bitrate"):
-            cmd.extend(["-b:a", str(profile["audio_bitrate"])])
+        if audio_codec != "copy" and audio_bitrate:
+            cmd.extend(["-b:a", str(audio_bitrate)])
 
     if profile.get("movflags_faststart", True):
         cmd.extend(["-movflags", "+faststart"])

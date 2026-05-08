@@ -15,9 +15,15 @@ CRF 18
 original resolution
 original frame rate
 pix_fmt yuv420p
-audio copy when possible
+audio copy when the narration is already AAC (m4a)
 movflags +faststart
 ```
+
+`audio_codec: copy` only works when the narration audio is already AAC inside
+an MP4-compatible container (typically `.m4a`). Feeding WAV, MP3, or FLAC will
+fail to mux into the MP4 output, so the renderer auto-detects the input codec
+and falls back to `aac` re-encoding with a printed warning. To skip the
+warning, set `audio_codec: aac` explicitly when you know the input isn't AAC.
 
 Preview render:
 

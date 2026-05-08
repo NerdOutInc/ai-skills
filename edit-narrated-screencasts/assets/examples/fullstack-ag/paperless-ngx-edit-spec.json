@@ -1,8 +1,8 @@
 {
-  "output": "/tmp/narrated-screencast-editor/paperless-ngx-case-study.mp4",
+  "output": "$PAPERLESS_OUTPUT",
   "inputs": {
-    "video": "/Users/brian/github/nerdoutinc/paperless-ag/videos/src/01-what-is-paperless.mp4",
-    "audio": "/Users/brian/github/nerdoutinc/paperless-ag/videos/src/01-what-is-paperless-ngx.m4a"
+    "video": "$PAPERLESS_SOURCE_VIDEO",
+    "audio": "$PAPERLESS_NARRATION"
   },
   "timeline": {
     "width": 3600,
@@ -48,7 +48,7 @@
       },
       {
         "type": "freeze",
-        "path": "/Users/brian/Documents/Codex/2026-05-07/can-you-edit-video/analysis/freeze-note-list-4k.png",
+        "path": "$PAPERLESS_FREEZE_DOC_LIST",
         "duration": 11.88
       },
       {
@@ -66,20 +66,20 @@
       }
     ],
     "intro": {
-      "path": "/Users/brian/Documents/Codex/2026-05-07/can-you-edit-video/analysis/title-card-redesign/website-wheat-options/intro-website-wheat-option-B.png",
+      "path": "$PAPERLESS_INTRO_CARD",
       "duration": 4,
       "fade_duration": 1,
       "offset": 3
     },
     "outro": {
-      "path": "/Users/brian/Documents/Codex/2026-05-07/can-you-edit-video/analysis/title-card-redesign/website-wheat-options/outro-website-wheat-option-B.png",
+      "path": "$PAPERLESS_OUTRO_CARD",
       "duration": 3.871552,
       "fade_duration": 1,
       "offset": 88.311668
     },
     "overlays": [
       {
-        "path": "/Users/brian/Documents/Codex/2026-05-07/can-you-edit-video/analysis/hq-patch/clean35-tooltip-green-alpha-4k.png",
+        "path": "$PAPERLESS_TOOLTIP_PATCH",
         "start": 35.7,
         "end": 55.8,
         "x": 0,

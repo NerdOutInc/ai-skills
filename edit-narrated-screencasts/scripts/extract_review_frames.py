@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import math
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -52,17 +53,10 @@ def load_timestamps(args: argparse.Namespace) -> list[float]:
 
 
 def run_command(cmd: list[str], dry_run: bool) -> None:
-    printable = " ".join(shlex_quote(part) for part in cmd)
-    print(printable)
+    print(shlex.join(cmd))
     if dry_run:
         return
     subprocess.run(cmd, check=True)
-
-
-def shlex_quote(value: str) -> str:
-    import shlex
-
-    return shlex.quote(value)
 
 
 def extract_frames(video: Path, output_dir: Path, timestamps: list[float], args: argparse.Namespace) -> list[Path]:
