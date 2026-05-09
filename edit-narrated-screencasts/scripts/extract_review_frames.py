@@ -25,12 +25,18 @@ def parse_timestamp(value: str) -> float:
     seconds = float(parts[-1])
     minutes = int(parts[-2])
     hours = int(parts[-3]) if len(parts) == 3 else 0
-    return hours * 3600 + minutes * 60 + seconds
+    result = hours * 3600 + minutes * 60 + seconds
+    if result < 0:
+        raise ValueError(f"timestamp must be non-negative: {value}")
+    return result
 
 
 def timestamp_label(seconds: float) -> str:
     whole = int(seconds)
     millis = int(round((seconds - whole) * 1000))
+    if millis == 1000:
+        millis = 0
+        whole += 1
     minutes, sec = divmod(whole, 60)
     hours, minutes = divmod(minutes, 60)
     if hours:
@@ -42,7 +48,10 @@ def load_timestamps(args: argparse.Namespace) -> list[float]:
     values: list[str] = []
     values.extend(args.timestamps or [])
     if args.timestamps_file:
-        for raw in args.timestamps_file.expanduser().read_text().splitlines():
+        timestamps_file = args.timestamps_file.expanduser()
+        if not timestamps_file.exists():
+            raise SystemExit(f"Timestamps file not found: {timestamps_file}")
+        for raw in timestamps_file.read_text().splitlines():
             clean = raw.split("#", 1)[0].strip()
             if clean:
                 values.append(clean.split()[0])
@@ -99,30 +108,30 @@ def make_contact_sheet(frames: list[Path], timestamps: list[float], output: Path
     except ImportError as exc:
         raise SystemExit("Pillow is required for contact sheets. Install pillow or use --no-sheet.") from exc
 
-    existing = [frame for frame in frames if frame.exists()]
-    if not existing:
+    existing_pairs = [(frame, ts) for frame, ts in zip(frames, timestamps) if frame.exists()]
+    if not existing_pairs:
         raise SystemExit("No extracted frames exist; cannot build contact sheet.")
 
     images = []
-    for frame in existing:
+    for frame, ts in existing_pairs:
         image = Image.open(frame).convert("RGB")
         ratio = width / image.width
-        images.append(image.resize((width, int(image.height * ratio))))
+        images.append((image.resize((width, int(image.height * ratio))), ts))
 
     label_height = 36
     rows = math.ceil(len(images) / cols)
-    cell_height = max(image.height for image in images) + label_height
+    cell_height = max(image.height for image, _ in images) + label_height
     sheet = Image.new("RGB", (cols * width, rows * cell_height), "white")
     draw = ImageDraw.Draw(sheet)
     font = ImageFont.load_default()
 
-    for index, image in enumerate(images):
+    for index, (image, ts) in enumerate(images):
         col = index % cols
         row = index // cols
         x = col * width
         y = row * cell_height
         sheet.paste(image, (x, y + label_height))
-        label = f"{index + 1}: {timestamps[index]:.3f}s"
+        label = f"{index + 1}: {ts:.3f}s"
         draw.text((x + 10, y + 10), label, fill=(32, 32, 32), font=font)
 
     output.parent.mkdir(parents=True, exist_ok=True)

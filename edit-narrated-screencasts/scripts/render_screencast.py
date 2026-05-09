@@ -134,12 +134,15 @@ def require_file(path: Path | None, label: str, dry_run: bool) -> None:
         raise SystemExit(f"{label} not found: {path}")
 
 
-def seconds(value: Any, label: str) -> float:
+def seconds(value: Any, label: str, *, positive: bool = False) -> float:
     try:
         result = float(value)
     except (TypeError, ValueError) as exc:
         raise SystemExit(f"{label} must be a number") from exc
-    if result < 0:
+    if positive:
+        if result <= 0:
+            raise SystemExit(f"{label} must be greater than 0")
+    elif result < 0:
         raise SystemExit(f"{label} must be non-negative")
     return result
 
@@ -188,7 +191,7 @@ class RenderBuilder:
 
     def make_body(self, video_index: int) -> tuple[str, float]:
         timeline = self.spec.get("timeline", {})
-        fps = seconds(timeline.get("fps", 60), "timeline.fps")
+        fps = seconds(timeline.get("fps", 60), "timeline.fps", positive=True)
         segments = timeline.get("segments") or []
         if not segments:
             raise SystemExit("timeline.segments must contain at least one segment")
@@ -205,11 +208,9 @@ class RenderBuilder:
                     raise SystemExit(f"segments[{index}].end must be greater than start")
                 multiplier = segment.get("setpts_multiplier")
                 if multiplier is None:
-                    speed = seconds(segment.get("speed", 1), f"segments[{index}].speed")
-                    if speed == 0:
-                        raise SystemExit(f"segments[{index}].speed must not be 0")
+                    speed = seconds(segment.get("speed", 1), f"segments[{index}].speed", positive=True)
                     multiplier = 1 / speed
-                multiplier = seconds(multiplier, f"segments[{index}].setpts_multiplier")
+                multiplier = seconds(multiplier, f"segments[{index}].setpts_multiplier", positive=True)
                 pad_after = seconds(segment.get("clone_pad_after", 0), f"segments[{index}].clone_pad_after")
                 chain = (
                     f"[{video_index}:v]"
@@ -246,7 +247,7 @@ class RenderBuilder:
 
     def make_card(self, card: dict[str, Any], name: str) -> tuple[str, float, float]:
         timeline = self.spec.get("timeline", {})
-        fps = seconds(timeline.get("fps", 60), "timeline.fps")
+        fps = seconds(timeline.get("fps", 60), "timeline.fps", positive=True)
         path = resolve_path(card.get("path"), self.base_dir)
         duration = seconds(card.get("duration"), f"{name}.duration")
         fade = seconds(card.get("fade_duration", 1), f"{name}.fade_duration")
@@ -275,6 +276,11 @@ class RenderBuilder:
         if intro:
             intro_label, intro_duration, intro_fade = self.make_card(intro, "intro")
             offset = seconds(intro.get("offset", intro_duration - intro_fade), "intro.offset")
+            max_offset = intro_duration - intro_fade
+            if offset > max_offset:
+                raise SystemExit(
+                    f"intro.offset ({fmt(offset)}) must be <= intro.duration - intro.fade_duration ({fmt(max_offset)})"
+                )
             next_label = "vafterintro"
             self.filters.append(
                 f"[{intro_label}][{current_label}]"
@@ -288,6 +294,11 @@ class RenderBuilder:
         if outro:
             outro_label, outro_duration, outro_fade = self.make_card(outro, "outro")
             offset = seconds(outro.get("offset", current_duration - outro_fade), "outro.offset")
+            max_offset = current_duration - outro_fade
+            if offset > max_offset:
+                raise SystemExit(
+                    f"outro.offset ({fmt(offset)}) must be <= preceding-content duration - outro.fade_duration ({fmt(max_offset)})"
+                )
             next_label = "vafteroutro"
             self.filters.append(
                 f"[{current_label}][{outro_label}]"

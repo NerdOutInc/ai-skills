@@ -50,6 +50,9 @@ def human_duration(value: Any) -> str:
         return "unknown"
     whole = int(seconds)
     millis = int(round((seconds - whole) * 1000))
+    if millis == 1000:
+        millis = 0
+        whole += 1
     minutes, sec = divmod(whole, 60)
     hours, minutes = divmod(minutes, 60)
     if hours:
