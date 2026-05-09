@@ -34,7 +34,12 @@ def run_ffprobe(path: Path) -> dict[str, Any]:
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as exc:
         raise SystemExit(exc.stderr.strip() or f"ffprobe failed for {path}") from exc
-    return json.loads(result.stdout)
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(
+            f"Could not parse ffprobe JSON for {path} (line {exc.lineno}, col {exc.colno}): {exc.msg}"
+        ) from exc
 
 
 def as_float(value: Any) -> float | None:

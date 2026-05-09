@@ -70,7 +70,10 @@ def run_command(cmd: list[str], dry_run: bool) -> None:
     print(shlex.join(cmd), flush=True)
     if dry_run:
         return
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"ffmpeg failed with exit code {exc.returncode}")
 
 
 def extract_frames(video: Path, output_dir: Path, timestamps: list[float], args: argparse.Namespace) -> list[Path]:

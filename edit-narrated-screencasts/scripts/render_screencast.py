@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shlex
 import shutil
@@ -193,6 +194,8 @@ def seconds(value: Any, label: str, *, positive: bool = False) -> float:
         result = float(value)
     except (TypeError, ValueError) as exc:
         raise SystemExit(f"{label} must be a number") from exc
+    if not math.isfinite(result):
+        raise SystemExit(f"{label} must be finite")
     if positive:
         if result <= 0:
             raise SystemExit(f"{label} must be greater than 0")
@@ -271,7 +274,7 @@ class RenderBuilder:
         timeline = self.spec.get("timeline", {})
         width = timeline.get("width")
         height = timeline.get("height")
-        if width and height:
+        if width is not None or height is not None:
             w = integer(width, "timeline.width", positive=True)
             h = integer(height, "timeline.height", positive=True)
             return (
@@ -545,12 +548,15 @@ def main() -> int:
         validate_profile_name(spec, args.profile)
         spec.setdefault("profiles", {}).setdefault(args.profile, {})["limit_duration"] = args.limit_duration
 
-    output = args.output.expanduser() if args.output else None
+    output = resolve_path(str(args.output), spec_path.parent) if args.output else None
     cmd = build_command(spec, spec_path.parent, args.profile, output, args.dry_run)
     print(shlex.join(cmd), flush=True)
     if args.dry_run:
         return 0
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(f"ffmpeg failed with exit code {exc.returncode}")
     return 0
 
 
