@@ -63,14 +63,11 @@ with a 1s fade). See `edit-spec.md` for the full constraint.
 
 ## 3. Generate or Collect Still Assets
 
-Title cards (Fullstack AG brand — see `title-cards.md` for other brands and
-the macOS font dependency):
-
-```bash
-python3 "$SKILL_DIR/scripts/render_fullstack_ag_cards.py" \
-  --config style.json \
-  --output-dir /tmp/my-edit/cards
-```
+If the edit needs intro or outro stills, create them as one-off project assets
+using the user's supplied brand files, screenshots, or generated artwork. Keep
+those images in the edit output directory, not inside the skill repo. Match the
+source video resolution unless the user asks otherwise, and show the stills or
+a preview render before making an HQ video.
 
 Review frames:
 
@@ -100,7 +97,7 @@ python3 "$SKILL_DIR/scripts/render_screencast.py" edit-spec.json \
 
 Use the preview to check:
 
-- Intro text and brand treatment.
+- Any intro/outro stills the user requested.
 - Fade duration between intro, video, and outro.
 - Narration/action timing.
 - Leading-silence alignment (first narration word should land at the body

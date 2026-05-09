@@ -32,10 +32,8 @@ npx skills add https://github.com/NerdOutInc/ai-skills --list
 The `edit-narrated-screencasts` skill helps agents turn an existing screen
 recording and separately recorded narration into a polished screencast. It
 covers media inspection, narration/action timing maps, clip retiming, freeze
-frames, branded intro/outro cards (the bundled Fullstack AG card renderer is
-intended as a template — see the skill's `references/title-cards.md`),
-transparent artifact patches, preview renders, HQ renders, and timestamp
-contact-sheet verification.
+frames, optional project-specific intro/outro stills, transparent artifact
+patches, preview renders, HQ renders, and timestamp contact-sheet verification.
 
 Install with:
 

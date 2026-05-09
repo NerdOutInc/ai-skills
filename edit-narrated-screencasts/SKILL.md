@@ -2,10 +2,10 @@
 name: edit-narrated-screencasts
 description: >
   Edit narrated screencasts by syncing existing narration to screen actions,
-  retiming footage, adding branded title and outro cards, inserting freeze
-  frames, patching visual artifacts such as hover tooltips, and rendering
-  preview or high-quality MP4 outputs. Use when asked to combine a voiceover
-  with existing screen recording footage or polish a screencast edit.
+  retiming footage, inserting freeze frames, patching visual artifacts such as
+  hover tooltips, optionally adding user-supplied intro/outro stills, and
+  rendering preview or high-quality MP4 outputs. Use when asked to combine a
+  voiceover with existing screen recording footage or polish a screencast edit.
 ---
 
 # Edit Narrated Screencasts
@@ -40,10 +40,10 @@ Follow each phase in order.
      and edit operation.
 
 3. Create supporting stills.
-   - Generate brand-specific title and outro cards. The bundled
-     `scripts/render_fullstack_ag_cards.py` is the Fullstack AG card renderer;
-     copy it as a starting point for other brands. See
-     `references/title-cards.md` for guidance.
+   - If the user asks for intro/outro stills, treat them as project-specific
+     still assets. Use supplied artwork, inspect the user's actual brand/source
+     files, or create one-off images in the requested output directory. Do not
+     rely on bundled brand templates.
    - Extract clean freeze frames with `ffmpeg` or `scripts/extract_review_frames.py`.
    - When a hover title, cursor artifact, toast, or other blemish persists, use
      `scripts/make_overlay_patch.py` to build a transparent patch from a clean
@@ -73,10 +73,10 @@ Follow each phase in order.
 
 - Never overwrite the user's original video or audio.
 - Keep large generated media out of the skill repository.
-- Put preview renders, final renders, extracted frames, and temporary cards in
-  a user-specified output directory.
+- Put preview renders, final renders, extracted frames, generated stills, and
+  temporary stills in a user-specified output directory.
 - Before rendering HQ, show or describe the preview result and confirm the user
-  likes the timing and title card design.
+  likes the timing and any generated still-card design.
 - Print generated `ffmpeg` commands before running them so the edit is
   explainable and recoverable.
 - If replacing a visual artifact with a static patch, verify alignment at the
@@ -94,9 +94,6 @@ Follow each phase in order.
 - `scripts/probe_media.py`: summarize source video/audio metadata.
 - `scripts/extract_review_frames.py`: extract timestamped frames and contact
   sheets for review.
-- `scripts/render_fullstack_ag_cards.py`: generate Fullstack AG branded
-  intro/outro PNGs. Macos-only font lookup; treat as a template for other
-  brands rather than a generic card renderer (see `references/title-cards.md`).
 - `scripts/make_overlay_patch.py`: create transparent PNG overlays from clean
   and dirty frames.
 - `scripts/render_screencast.py`: render preview/HQ MP4 files from an edit spec.
@@ -105,8 +102,7 @@ Read the references when needed:
 
 - `references/workflow.md` for the full editing process.
 - `references/edit-spec.md` for the JSON render-spec schema.
-- `references/title-cards.md` for the title-card script convention.
 - `references/quality-and-compression.md` for encode choices and file size
   tradeoffs.
-- `references/paperless-ngx-case-study.md` for the worked Fullstack AG /
-  Paperless NGX example.
+- `references/paperless-ngx-case-study.md` for the worked Paperless NGX
+  example.

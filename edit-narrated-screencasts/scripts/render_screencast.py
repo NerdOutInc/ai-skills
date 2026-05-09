@@ -262,7 +262,7 @@ class RenderBuilder:
         self.filters.append(chain)
         return label, duration, fade
 
-    def add_cards(self, body_label: str, body_duration: float) -> tuple[str, float]:
+    def add_intro_outro(self, body_label: str, body_duration: float) -> tuple[str, float]:
         timeline = self.spec.get("timeline", {})
         current_label = body_label
         current_duration = body_duration
@@ -358,7 +358,7 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
         audio_index = builder.add_input(source_audio)
 
     body_label, body_duration = builder.make_body(video_index)
-    composite_label, _ = builder.add_cards(body_label, body_duration)
+    composite_label, _ = builder.add_intro_outro(body_label, body_duration)
     overlay_label = builder.add_overlays(composite_label)
     final_label = builder.finalize_video(overlay_label)
 

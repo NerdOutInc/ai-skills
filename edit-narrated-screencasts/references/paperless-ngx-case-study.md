@@ -1,9 +1,9 @@
 # Paperless NGX Case Study
 
-This case study records the workflow used for the Fullstack AG Paperless NGX
-narrated screencast. It is a worked example, not a runnable tutorial: it
+This case study records the workflow used for a Paperless NGX narrated
+screencast. It is a worked example, not a runnable tutorial: it
 references local media that lives on the original author's machine. The
-example spec under `assets/examples/fullstack-ag/` substitutes environment
+example spec under `assets/examples/paperless-ngx/` substitutes environment
 variables for the absolute paths so it can be inspected (and `--dry-run`'d)
 without those files.
 
@@ -30,15 +30,15 @@ Observed source facts:
 
 ## Edit Strategy
 
-- Added a 4 second branded intro card.
+- Added a 4 second custom intro card.
 - Crossfaded intro to video over 1 second.
 - Retimed the source screen recording into several segments with `setpts`.
 - Inserted a clean freeze frame for the document list while narration caught up.
 - Used a transparent overlay patch from 35.7s to 55.8s to hide the persistent
   "Toggle tag filter" hover title and a small green artifact.
-- Crossfaded to the outro right after the narration phrase "makes searching
-  even smarter."
-- Used a 3.871552 second outro card with the final text:
+- Crossfaded to the custom outro right after the narration phrase "makes
+  searching even smarter."
+- Used a 3.871552 second outro still with the final text:
   `Thanks for watching!` and `https://fullstack.ag`.
 
 ## Timing Recipe
@@ -69,7 +69,7 @@ Title card fade settings:
 - A freeze frame is often better than showing a long upload or indexing wait.
 - Transparent patches work well when the background underneath is static.
 - Always inspect a patch at the start, middle, and end of its enabled range.
-- Generate preview renders before HQ; title card contrast and timing are easier
+- Generate preview renders before HQ; still-card contrast and timing are easier
   to iterate at preview quality.
 - A final HQ file can be much smaller than the capture source when encoded with
   H.264 CRF 18 and a slow preset.
@@ -79,14 +79,14 @@ Title card fade settings:
 See:
 
 ```text
-assets/examples/fullstack-ag/paperless-ngx-edit-spec.json
+assets/examples/paperless-ngx/paperless-ngx-edit-spec.json
 ```
 
 Dry-run it with:
 
 ```bash
 python3 "$SKILL_DIR/scripts/render_screencast.py" \
-  "$SKILL_DIR/assets/examples/fullstack-ag/paperless-ngx-edit-spec.json" \
+  "$SKILL_DIR/assets/examples/paperless-ngx/paperless-ngx-edit-spec.json" \
   --profile hq \
   --dry-run
 ```

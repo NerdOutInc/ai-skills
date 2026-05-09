@@ -185,7 +185,7 @@ spec `profiles.<name>` keys override those defaults field-by-field.
 | `audio_codec` | `aac` / `copy` | `copy` is fast and lossless but **requires the input audio to already be AAC/m4a**. The renderer auto-detects non-AAC inputs and falls back to `aac` with a printed warning. |
 | `audio_bitrate` | `128k` / *(unset)* | Used only when `audio_codec` is not `copy`. |
 | `movflags_faststart` | `true` / `true` | Adds `-movflags +faststart` (better web-shareable MP4 layout). |
-| `shortest` | `true` / `true` | Adds `-shortest`, capping output duration at the shortest input. With narration as a separate input this typically truncates output to narration length. Set `false` if the body+cards are intentionally longer than the narration. |
+| `shortest` | `true` / `true` | Adds `-shortest`, capping output duration at the shortest input. With narration as a separate input this typically truncates output to narration length. Set `false` if the body plus intro/outro stills are intentionally longer than the narration. |
 | `limit_duration` | *(unset)* / *(unset)* | Cap output duration in seconds. Useful for short proof renders; overridden by `--limit-duration` on the command line. |
 
 Run a dry run to inspect the generated command:
