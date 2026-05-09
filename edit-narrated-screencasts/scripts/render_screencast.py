@@ -37,7 +37,8 @@ DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
 }
 
 TIMING_TOLERANCE = 1e-6
-UNEXPANDED_VAR_PATTERN = re.compile(r"(?<!\\)(?:\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|%[A-Za-z_][A-Za-z0-9_]*%)")
+UNEXPANDED_POSIX_VAR_PATTERN = re.compile(r"(?<!\\)\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)")
+UNEXPANDED_WINDOWS_VAR_PATTERN = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*%")
 
 
 def detect_audio_codec(path: Path) -> str | None:
@@ -187,7 +188,8 @@ def resolve_path(value: Any, base: Path, label: str = "path") -> Path | None:
 
 
 def has_unexpanded_env_var(path: Path) -> bool:
-    return bool(UNEXPANDED_VAR_PATTERN.search(str(path)))
+    text = str(path)
+    return bool(UNEXPANDED_POSIX_VAR_PATTERN.search(text) or UNEXPANDED_WINDOWS_VAR_PATTERN.search(text))
 
 
 def require_file(path: Path | None, label: str, dry_run: bool) -> None:
@@ -465,7 +467,9 @@ def merged_profile(spec: dict[str, Any], name: str) -> dict[str, Any]:
 def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, output_override: Path | None, dry_run: bool) -> list[str]:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
-        raise SystemExit("ffmpeg was not found. Install ffmpeg first.")
+        if not dry_run:
+            raise SystemExit("ffmpeg was not found. Install ffmpeg first.")
+        ffmpeg = "ffmpeg"
 
     profile = merged_profile(spec, profile_name)
     builder = RenderBuilder(spec, base_dir, profile, dry_run)

@@ -89,7 +89,9 @@ def run_command(cmd: list[str], dry_run: bool) -> None:
 def extract_frames(video: Path, output_dir: Path, timestamps: list[float], args: argparse.Namespace) -> list[Path]:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
-        raise SystemExit("ffmpeg was not found. Install ffmpeg first.")
+        if not args.dry_run:
+            raise SystemExit("ffmpeg was not found. Install ffmpeg first.")
+        ffmpeg = "ffmpeg"
     if not args.dry_run:
         output_dir.mkdir(parents=True, exist_ok=True)
     frames: list[Path] = []
@@ -175,7 +177,7 @@ def main() -> int:
     args = parser.parse_args()
 
     video = args.video.expanduser()
-    if not video.exists():
+    if not args.dry_run and not video.exists():
         raise SystemExit(f"Video not found: {video}")
 
     timestamps = load_timestamps(args)
