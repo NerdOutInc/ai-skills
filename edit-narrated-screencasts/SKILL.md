@@ -27,7 +27,9 @@ Follow each phase in order.
    - Capture source duration, resolution, frame rate, codec, bitrate, audio
      duration, and whether the source has embedded audio.
    - Preserve the source resolution and frame rate for HQ unless the user
-     explicitly requests downscaling or upscaling.
+     explicitly requests downscaling or upscaling. The renderer auto-detects
+     resolution and frame rate when the source file is available; set
+     `timeline.fps` explicitly for placeholder-only dry runs.
 
 ### Phase 2 — Edit
 

@@ -16,9 +16,6 @@ def load_pillow():
     return Image, ImageChops, ImageFilter
 
 
-Image, ImageChops, ImageFilter = load_pillow()
-
-
 def parse_bbox(value: str | None) -> tuple[int, int, int, int] | None:
     if not value:
         return None
@@ -34,19 +31,29 @@ def parse_bbox(value: str | None) -> tuple[int, int, int, int] | None:
     return x, y, w, h
 
 
-def make_bbox_mask(size: tuple[int, int], bbox: tuple[int, int, int, int]) -> object:
-    mask = Image.new("L", size, 0)
+def make_bbox_mask(image_module: object, size: tuple[int, int], bbox: tuple[int, int, int, int]) -> object:
+    image_new = getattr(image_module, "new")
+    mask = image_new("L", size, 0)
     x, y, w, h = bbox
     mask.paste(255, (x, y, x + w, y + h))
     return mask
 
 
-def make_diff_mask(clean: object, dirty: object, threshold: int, expand: int) -> object:
-    diff = ImageChops.difference(clean.convert("RGB"), dirty.convert("RGB")).convert("L")
+def make_diff_mask(
+    image_chops_module: object,
+    image_filter_module: object,
+    clean: object,
+    dirty: object,
+    threshold: int,
+    expand: int,
+) -> object:
+    difference = getattr(image_chops_module, "difference")
+    max_filter = getattr(image_filter_module, "MaxFilter")
+    diff = difference(clean.convert("RGB"), dirty.convert("RGB")).convert("L")
     mask = diff.point(lambda value: 255 if value >= threshold else 0)
     if expand > 0:
         kernel = expand * 2 + 1
-        mask = mask.filter(ImageFilter.MaxFilter(kernel))
+        mask = mask.filter(max_filter(kernel))
     return mask
 
 
@@ -62,6 +69,8 @@ def main() -> int:
     parser.add_argument("--expand", type=int, default=3, help="Pixel expansion for --diff-alpha mask")
     parser.add_argument("--dry-run", action="store_true", help="Validate inputs without writing")
     args = parser.parse_args()
+
+    Image, ImageChops, ImageFilter = load_pillow()
 
     clean_path = args.clean.expanduser()
     dirty_path = args.dirty.expanduser()
@@ -81,12 +90,12 @@ def main() -> int:
             raise SystemExit(f"Mask not found: {mask_path}")
         mask = Image.open(mask_path).convert("L").resize(clean.size)
     elif args.diff_alpha:
-        mask = make_diff_mask(clean, dirty, args.threshold, args.expand)
+        mask = make_diff_mask(ImageChops, ImageFilter, clean, dirty, args.threshold, args.expand)
         if args.bbox:
-            bbox_mask = make_bbox_mask(clean.size, args.bbox)
+            bbox_mask = make_bbox_mask(Image, clean.size, args.bbox)
             mask = ImageChops.multiply(mask, bbox_mask)
     elif args.bbox:
-        mask = make_bbox_mask(clean.size, args.bbox)
+        mask = make_bbox_mask(Image, clean.size, args.bbox)
     else:
         raise SystemExit("Provide --bbox, --mask, or --diff-alpha.")
 

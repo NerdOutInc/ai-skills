@@ -77,7 +77,7 @@ environment variables (`$VAR` and `${VAR}` are both expanded).
 | Field | Required | Description |
 | --- | --- | --- |
 | `width`, `height` | No | Canvas size. All segments and stills are scaled to fit (preserve aspect, pad with letterboxing). Defaults to the first source video's resolution when that file is available to `ffprobe`; set explicitly for placeholder-only dry runs. |
-| `fps` | No | Output frame rate (default `60`). All filter graphs run at this rate. |
+| `fps` | No | Output frame rate. Defaults to the source video's frame rate when that file is available to `ffprobe`, otherwise `60`. All filter graphs run at this rate. |
 | `segments` | Yes | Body timeline before intro/outro fades are applied. Must contain at least one segment. |
 | `intro` | No | Optional still image that crossfades into the body timeline. |
 | `outro` | No | Optional still image that crossfades from the body timeline. |

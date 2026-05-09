@@ -67,7 +67,7 @@ def load_timestamps(args: argparse.Namespace) -> list[float]:
 
 
 def run_command(cmd: list[str], dry_run: bool) -> None:
-    print(shlex.join(cmd))
+    print(shlex.join(cmd), flush=True)
     if dry_run:
         return
     subprocess.run(cmd, check=True)
@@ -77,7 +77,8 @@ def extract_frames(video: Path, output_dir: Path, timestamps: list[float], args:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise SystemExit("ffmpeg was not found. Install ffmpeg first.")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if not args.dry_run:
+        output_dir.mkdir(parents=True, exist_ok=True)
     frames: list[Path] = []
     for index, seconds in enumerate(timestamps, start=1):
         label = timestamp_label(seconds)

@@ -10,6 +10,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,8 @@ DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
         "movflags_faststart": True,
     },
 }
+
+TIMING_TOLERANCE = 1e-6
 
 
 def detect_audio_codec(path: Path) -> str | None:
@@ -99,22 +102,73 @@ def detect_video_size(path: Path) -> tuple[int, int] | None:
     return width, height
 
 
-def ensure_timeline_canvas(spec: dict[str, Any], source_video: Path | None) -> None:
+def parse_frame_rate(value: str | None) -> float | None:
+    if not value or value == "0/0":
+        return None
+    try:
+        rate = Fraction(value)
+    except (ValueError, ZeroDivisionError):
+        return None
+    if rate <= 0:
+        return None
+    return float(rate)
+
+
+def detect_video_fps(path: Path) -> float | None:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe or not path.exists():
+        return None
+    try:
+        result = subprocess.run(
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=avg_frame_rate,r_frame_rate",
+                "-of",
+                "json",
+                str(path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return None
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    streams = data.get("streams") or []
+    if not streams:
+        return None
+    stream = streams[0]
+    return parse_frame_rate(stream.get("avg_frame_rate")) or parse_frame_rate(stream.get("r_frame_rate"))
+
+
+def ensure_timeline_defaults(spec: dict[str, Any], source_video: Path | None) -> None:
     timeline = spec.setdefault("timeline", {})
     width = timeline.get("width")
     height = timeline.get("height")
-    if width and height:
+    if not source_video:
         return
 
-    detected = detect_video_size(source_video) if source_video else None
-    if not detected:
-        return
+    if not (width and height):
+        detected_size = detect_video_size(source_video)
+        if detected_size:
+            detected_width, detected_height = detected_size
+            if not width:
+                timeline["width"] = detected_width
+            if not height:
+                timeline["height"] = detected_height
 
-    detected_width, detected_height = detected
-    if not width:
-        timeline["width"] = detected_width
-    if not height:
-        timeline["height"] = detected_height
+    if "fps" not in timeline or timeline.get("fps") is None:
+        detected_fps = detect_video_fps(source_video)
+        if detected_fps:
+            timeline["fps"] = detected_fps
 
 
 def resolve_path(value: str | None, base: Path) -> Path | None:
@@ -149,6 +203,24 @@ def seconds(value: Any, label: str, *, positive: bool = False) -> float:
 
 def fmt(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".")
+
+
+def validate_profile_name(spec: dict[str, Any], name: str) -> None:
+    spec_profiles = spec.get("profiles") or {}
+    if name not in DEFAULT_PROFILES and name not in spec_profiles:
+        known = sorted(set(DEFAULT_PROFILES) | set(spec_profiles))
+        raise SystemExit(f"Unknown profile '{name}'. Known profiles: {', '.join(known)}")
+
+
+def normalized_path(path: Path) -> Path:
+    return path.expanduser().resolve(strict=False)
+
+
+def reject_output_overwriting_inputs(output: Path, inputs: list[tuple[str, Path | None]]) -> None:
+    output_path = normalized_path(output)
+    for label, input_path in inputs:
+        if input_path and output_path == normalized_path(input_path):
+            raise SystemExit(f"Output path must not overwrite {label}: {output}")
 
 
 class RenderBuilder:
@@ -277,7 +349,7 @@ class RenderBuilder:
             intro_label, intro_duration, intro_fade = self.make_card(intro, "intro")
             offset = seconds(intro.get("offset", intro_duration - intro_fade), "intro.offset")
             max_offset = intro_duration - intro_fade
-            if offset > max_offset:
+            if offset - max_offset > TIMING_TOLERANCE:
                 raise SystemExit(
                     f"intro.offset ({fmt(offset)}) must be <= intro.duration - intro.fade_duration ({fmt(max_offset)})"
                 )
@@ -295,7 +367,7 @@ class RenderBuilder:
             outro_label, outro_duration, outro_fade = self.make_card(outro, "outro")
             offset = seconds(outro.get("offset", current_duration - outro_fade), "outro.offset")
             max_offset = current_duration - outro_fade
-            if offset > max_offset:
+            if offset - max_offset > TIMING_TOLERANCE:
                 raise SystemExit(
                     f"outro.offset ({fmt(offset)}) must be <= preceding-content duration - outro.fade_duration ({fmt(max_offset)})"
                 )
@@ -347,10 +419,8 @@ class RenderBuilder:
 
 
 def merged_profile(spec: dict[str, Any], name: str) -> dict[str, Any]:
+    validate_profile_name(spec, name)
     spec_profiles = spec.get("profiles") or {}
-    if name not in DEFAULT_PROFILES and name not in spec_profiles:
-        known = sorted(set(DEFAULT_PROFILES) | set(spec_profiles))
-        raise SystemExit(f"Unknown profile '{name}'. Known profiles: {', '.join(known)}")
     profile = dict(DEFAULT_PROFILES.get(name, {}))
     profile.update(spec_profiles.get(name, {}))
     return profile
@@ -368,7 +438,7 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     source_video = resolve_path(inputs.get("video"), base_dir)
     source_audio = resolve_path(inputs.get("audio"), base_dir)
     require_file(source_video, "inputs.video", dry_run)
-    ensure_timeline_canvas(spec, source_video)
+    ensure_timeline_defaults(spec, source_video)
     video_index = builder.add_input(source_video)
 
     audio_index: int | None = None
@@ -384,6 +454,7 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     output = output_override or resolve_path(spec.get("output"), base_dir)
     if not output:
         raise SystemExit("Provide spec.output or --output")
+    reject_output_overwriting_inputs(output, [("inputs.video", source_video), ("inputs.audio", source_audio)])
     if not dry_run:
         output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -441,11 +512,12 @@ def main() -> int:
     spec_path = args.spec.expanduser()
     spec = json.loads(spec_path.read_text())
     if args.limit_duration is not None:
+        validate_profile_name(spec, args.profile)
         spec.setdefault("profiles", {}).setdefault(args.profile, {})["limit_duration"] = args.limit_duration
 
     output = args.output.expanduser() if args.output else None
     cmd = build_command(spec, spec_path.parent, args.profile, output, args.dry_run)
-    print(shlex.join(cmd))
+    print(shlex.join(cmd), flush=True)
     if args.dry_run:
         return 0
     subprocess.run(cmd, check=True)
