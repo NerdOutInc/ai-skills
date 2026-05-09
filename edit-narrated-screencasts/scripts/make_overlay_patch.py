@@ -16,6 +16,26 @@ def load_pillow():
     return Image, ImageChops, ImageFilter
 
 
+def threshold_int(value: str) -> int:
+    try:
+        result = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"threshold must be an integer: {value}") from exc
+    if not 0 <= result <= 255:
+        raise argparse.ArgumentTypeError(f"threshold must be between 0 and 255: {result}")
+    return result
+
+
+def non_negative_int(value: str) -> int:
+    try:
+        result = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"must be an integer: {value}") from exc
+    if result < 0:
+        raise argparse.ArgumentTypeError(f"must be non-negative: {result}")
+    return result
+
+
 def parse_bbox(value: str | None) -> tuple[int, int, int, int] | None:
     if not value:
         return None
@@ -65,8 +85,8 @@ def main() -> int:
     parser.add_argument("--bbox", type=parse_bbox, help="Patch rectangle as x,y,w,h")
     parser.add_argument("--mask", type=Path, help="Optional grayscale alpha mask")
     parser.add_argument("--diff-alpha", action="store_true", help="Use frame difference as alpha")
-    parser.add_argument("--threshold", type=int, default=18, help="Difference threshold for --diff-alpha")
-    parser.add_argument("--expand", type=int, default=3, help="Pixel expansion for --diff-alpha mask")
+    parser.add_argument("--threshold", type=threshold_int, default=18, help="Difference threshold for --diff-alpha (0..255)")
+    parser.add_argument("--expand", type=non_negative_int, default=3, help="Pixel expansion for --diff-alpha mask (>= 0)")
     parser.add_argument("--dry-run", action="store_true", help="Validate inputs without writing")
     args = parser.parse_args()
 

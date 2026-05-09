@@ -6,7 +6,7 @@ description: >
   hover tooltips, optionally adding user-supplied intro/outro stills, and
   rendering preview or high-quality MP4 outputs. Use when asked to combine a
   voiceover with existing screen recording footage or polish a screencast edit.
-allow_implicit_invocation: false
+disable-model-invocation: true
 ---
 
 # Edit Narrated Screencasts
