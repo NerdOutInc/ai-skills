@@ -174,9 +174,11 @@ def ensure_timeline_defaults(spec: dict[str, Any], source_video: Path | None) ->
             timeline["fps"] = detected_fps
 
 
-def resolve_path(value: str | None, base: Path) -> Path | None:
-    if not value:
+def resolve_path(value: Any, base: Path, label: str = "path") -> Path | None:
+    if value is None or value == "":
         return None
+    if not isinstance(value, str):
+        raise SystemExit(f"{label} must be a string path")
     expanded = os.path.expandvars(value)
     path = Path(expanded).expanduser()
     if not path.is_absolute():
@@ -330,8 +332,8 @@ class RenderBuilder:
                 self.filters.append(chain)
                 total_duration += (end - start) * multiplier + pad_after
             elif kind == "freeze":
-                path = resolve_path(segment.get("path"), self.base_dir)
-                duration = seconds(segment.get("duration"), f"segments[{index}].duration")
+                path = resolve_path(segment.get("path"), self.base_dir, f"segments[{index}].path")
+                duration = seconds(segment.get("duration"), f"segments[{index}].duration", positive=True)
                 require_file(path, f"segments[{index}].path", self.dry_run)
                 image_index = self.add_input(path, loop=True, duration=duration)
                 chain = (
@@ -353,8 +355,8 @@ class RenderBuilder:
     def make_card(self, card: dict[str, Any], name: str) -> tuple[str, float, float]:
         timeline = self.spec.get("timeline", {})
         fps = seconds(timeline.get("fps", 60), "timeline.fps", positive=True)
-        path = resolve_path(card.get("path"), self.base_dir)
-        duration = seconds(card.get("duration"), f"{name}.duration")
+        path = resolve_path(card.get("path"), self.base_dir, f"{name}.path")
+        duration = seconds(card.get("duration"), f"{name}.duration", positive=True)
         fade = seconds(card.get("fade_duration", 1), f"{name}.fade_duration")
         if fade > duration:
             raise SystemExit(
@@ -420,7 +422,7 @@ class RenderBuilder:
         label = input_label
         overlays = self.spec.get("timeline", {}).get("overlays") or []
         for index, overlay in enumerate(overlays):
-            path = resolve_path(overlay.get("path"), self.base_dir)
+            path = resolve_path(overlay.get("path"), self.base_dir, f"overlays[{index}].path")
             require_file(path, f"overlays[{index}].path", self.dry_run)
             image_index = self.add_input(path, loop=True)
             overlay_label = f"overlay{index}"
@@ -469,8 +471,8 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     builder = RenderBuilder(spec, base_dir, profile, dry_run)
 
     inputs = spec.get("inputs", {})
-    source_video = resolve_path(inputs.get("video"), base_dir)
-    source_audio = resolve_path(inputs.get("audio"), base_dir)
+    source_video = resolve_path(inputs.get("video"), base_dir, "inputs.video")
+    source_audio = resolve_path(inputs.get("audio"), base_dir, "inputs.audio")
     require_file(source_video, "inputs.video", dry_run)
     ensure_timeline_defaults(spec, source_video)
     video_index = builder.add_input(source_video)
@@ -485,7 +487,7 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     overlay_label = builder.add_overlays(composite_label)
     final_label = builder.finalize_video(overlay_label)
 
-    output = output_override or resolve_path(spec.get("output"), base_dir)
+    output = output_override or resolve_path(spec.get("output"), base_dir, "spec.output")
     if not output:
         raise SystemExit("Provide spec.output or --output")
     reject_output_overwriting_inputs(output, [("inputs.video", source_video), ("inputs.audio", source_audio)])

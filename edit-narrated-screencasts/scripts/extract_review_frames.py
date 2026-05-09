@@ -44,6 +44,16 @@ def timestamp_label(seconds: float) -> str:
     return f"{minutes:02d}-{sec:02d}-{millis:03d}"
 
 
+def positive_int(value: str) -> int:
+    try:
+        result = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if result <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    return result
+
+
 def load_timestamps(args: argparse.Namespace) -> list[float]:
     values: list[str] = []
     values.extend(args.timestamps or [])
@@ -158,8 +168,8 @@ def main() -> int:
     parser.add_argument("--timestamps-file", type=Path, help="Text file with one timestamp per line")
     parser.add_argument("--prefix", default="frame", help="Output filename prefix")
     parser.add_argument("--sheet", type=Path, help="Contact sheet path")
-    parser.add_argument("--sheet-width", type=int, default=640, help="Width of each contact sheet cell")
-    parser.add_argument("--cols", type=int, default=3, help="Contact sheet columns")
+    parser.add_argument("--sheet-width", type=positive_int, default=640, help="Width of each contact sheet cell")
+    parser.add_argument("--cols", type=positive_int, default=3, help="Contact sheet columns")
     parser.add_argument("--no-sheet", action="store_true", help="Skip contact sheet generation")
     parser.add_argument("--dry-run", action="store_true", help="Print ffmpeg commands without running them")
     args = parser.parse_args()
