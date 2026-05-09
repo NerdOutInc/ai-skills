@@ -201,12 +201,20 @@ def seconds(value: Any, label: str, *, positive: bool = False) -> float:
     return result
 
 
-def positive_int(value: Any, label: str) -> int:
+def integer(value: Any, label: str, *, positive: bool = False) -> int:
+    if isinstance(value, bool) or value is None:
+        raise SystemExit(f"{label} must be an integer")
     try:
-        result = int(value)
+        as_float = float(value)
     except (TypeError, ValueError) as exc:
         raise SystemExit(f"{label} must be an integer") from exc
-    if result <= 0:
+    try:
+        result = int(as_float)
+    except (OverflowError, ValueError) as exc:
+        raise SystemExit(f"{label} must be an integer") from exc
+    if result != as_float:
+        raise SystemExit(f"{label} must be an integer")
+    if positive and result <= 0:
         raise SystemExit(f"{label} must be greater than 0")
     return result
 
@@ -264,8 +272,8 @@ class RenderBuilder:
         width = timeline.get("width")
         height = timeline.get("height")
         if width and height:
-            w = positive_int(width, "timeline.width")
-            h = positive_int(height, "timeline.height")
+            w = integer(width, "timeline.width", positive=True)
+            h = integer(height, "timeline.height", positive=True)
             return (
                 f"{label}scale={w}:{h}:"
                 "force_original_aspect_ratio=decrease,"
@@ -372,7 +380,8 @@ class RenderBuilder:
                 f"duration={fmt(intro_fade)}:offset={fmt(offset)}[{next_label}]"
             )
             current_label = next_label
-            current_duration = intro_duration + current_duration - intro_fade
+            # xfade output length = offset + input2_duration (input2 is the body)
+            current_duration = offset + current_duration
 
         outro = timeline.get("outro")
         if outro:
@@ -390,7 +399,7 @@ class RenderBuilder:
                 f"duration={fmt(outro_fade)}:offset={fmt(offset)}[{next_label}]"
             )
             current_label = next_label
-            current_duration = max(current_duration, offset + outro_duration)
+            current_duration = offset + outro_duration
 
         return current_label, current_duration
 
@@ -404,8 +413,8 @@ class RenderBuilder:
             overlay_label = f"overlay{index}"
             self.filters.append(f"[{image_index}:v]setpts=PTS-STARTPTS,format=rgba[{overlay_label}]")
             next_label = f"voverlay{index}"
-            x = int(overlay.get("x", 0))
-            y = int(overlay.get("y", 0))
+            x = integer(overlay.get("x", 0), f"overlays[{index}].x")
+            y = integer(overlay.get("y", 0), f"overlays[{index}].y")
             start = seconds(overlay.get("start", 0), f"overlays[{index}].start")
             end = seconds(overlay.get("end"), f"overlays[{index}].end")
             if end <= start:
@@ -423,7 +432,7 @@ class RenderBuilder:
         filters: list[str] = []
         scale_width = self.profile.get("scale_width")
         if scale_width:
-            filters.append(f"scale={int(scale_width)}:-2")
+            filters.append(f"scale={integer(scale_width, 'profile.scale_width', positive=True)}:-2")
         filters.append("format=yuv420p")
         output_label = "vfinal"
         self.filters.append(f"[{label}]{','.join(filters)}[{output_label}]")
