@@ -35,12 +35,6 @@ covers media inspection, narration/action timing maps, clip retiming, freeze
 frames, optional project-specific intro/outro stills, transparent artifact
 patches, preview renders, HQ renders, and timestamp contact-sheet verification.
 
-Install with:
-
-```bash
-npx skills add https://github.com/NerdOutInc/ai-skills --skill edit-narrated-screencasts
-```
-
 ### [screen-studio](screen-studio/README.md)
 
 The `screen-studio` skill helps agents record polished, repeatable macOS screencasts
