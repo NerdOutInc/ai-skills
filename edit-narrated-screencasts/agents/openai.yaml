@@ -4,4 +4,4 @@ interface:
   default_prompt: "Use $edit-narrated-screencasts to sync my narration with an existing screencast and render a preview first."
 
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false
