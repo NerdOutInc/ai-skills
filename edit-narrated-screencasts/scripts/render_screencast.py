@@ -157,13 +157,13 @@ def ensure_timeline_defaults(spec: dict[str, Any], source_video: Path | None) ->
     if not source_video:
         return
 
-    if not (width and height):
+    if width is None or height is None:
         detected_size = detect_video_size(source_video)
         if detected_size:
             detected_width, detected_height = detected_size
-            if not width:
+            if width is None:
                 timeline["width"] = detected_width
-            if not height:
+            if height is None:
                 timeline["height"] = detected_height
 
     if "fps" not in timeline or timeline.get("fps") is None:
@@ -190,6 +190,8 @@ def require_file(path: Path | None, label: str, dry_run: bool) -> None:
 
 
 def seconds(value: Any, label: str, *, positive: bool = False) -> float:
+    if isinstance(value, bool) or value is None:
+        raise SystemExit(f"{label} must be a number")
     try:
         result = float(value)
     except (TypeError, ValueError) as exc:
@@ -275,6 +277,8 @@ class RenderBuilder:
         width = timeline.get("width")
         height = timeline.get("height")
         if width is not None or height is not None:
+            if width is None or height is None:
+                raise SystemExit("timeline.width and timeline.height must be provided together")
             w = integer(width, "timeline.width", positive=True)
             h = integer(height, "timeline.height", positive=True)
             return (
