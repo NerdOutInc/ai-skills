@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -36,6 +37,7 @@ DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
 }
 
 TIMING_TOLERANCE = 1e-6
+UNEXPANDED_VAR_PATTERN = re.compile(r"(?<!\\)(?:\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|%[A-Za-z_][A-Za-z0-9_]*%)")
 
 
 def detect_audio_codec(path: Path) -> str | None:
@@ -180,6 +182,10 @@ def resolve_path(value: str | None, base: Path) -> Path | None:
     if not path.is_absolute():
         path = base / path
     return path
+
+
+def has_unexpanded_env_var(path: Path) -> bool:
+    return bool(UNEXPANDED_VAR_PATTERN.search(str(path)))
 
 
 def require_file(path: Path | None, label: str, dry_run: bool) -> None:
@@ -438,7 +444,7 @@ class RenderBuilder:
         label = input_label
         filters: list[str] = []
         scale_width = self.profile.get("scale_width")
-        if scale_width:
+        if scale_width is not None:
             filters.append(f"scale={integer(scale_width, 'profile.scale_width', positive=True)}:-2")
         filters.append("format=yuv420p")
         output_label = "vfinal"
@@ -483,6 +489,8 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     if not output:
         raise SystemExit("Provide spec.output or --output")
     reject_output_overwriting_inputs(output, [("inputs.video", source_video), ("inputs.audio", source_audio)])
+    if not dry_run and has_unexpanded_env_var(output):
+        raise SystemExit(f"Output path contains an unset environment variable: {output}")
     if not dry_run:
         output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -531,7 +539,7 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("spec", type=Path, help="JSON edit spec")
-    parser.add_argument("--profile", default="preview", help="Render profile from spec.profiles")
+    parser.add_argument("--profile", default="preview", help="Render profile from built-ins or spec.profiles")
     parser.add_argument("--output", type=Path, help="Override output path")
     parser.add_argument("--limit-duration", type=float, help="Temporary output duration cap")
     parser.add_argument("--dry-run", action="store_true", help="Print command without running ffmpeg")
