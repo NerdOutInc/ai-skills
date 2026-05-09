@@ -238,8 +238,17 @@ def fmt(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".")
 
 
+def get_spec_profiles(spec: dict[str, Any]) -> dict[str, Any]:
+    profiles = spec.get("profiles")
+    if profiles is None:
+        return {}
+    if not isinstance(profiles, dict):
+        raise SystemExit("spec.profiles must be a JSON object mapping profile names to settings")
+    return profiles
+
+
 def validate_profile_name(spec: dict[str, Any], name: str) -> None:
-    spec_profiles = spec.get("profiles") or {}
+    spec_profiles = get_spec_profiles(spec)
     if name not in DEFAULT_PROFILES and name not in spec_profiles:
         known = sorted(set(DEFAULT_PROFILES) | set(spec_profiles))
         raise SystemExit(f"Unknown profile '{name}'. Known profiles: {', '.join(known)}")
@@ -469,9 +478,12 @@ class RenderBuilder:
 
 def merged_profile(spec: dict[str, Any], name: str) -> dict[str, Any]:
     validate_profile_name(spec, name)
-    spec_profiles = spec.get("profiles") or {}
+    spec_profiles = get_spec_profiles(spec)
     profile = dict(DEFAULT_PROFILES.get(name, {}))
-    profile.update(spec_profiles.get(name, {}))
+    override = spec_profiles.get(name, {})
+    if not isinstance(override, dict):
+        raise SystemExit(f"spec.profiles['{name}'] must be a JSON object")
+    profile.update(override)
     return profile
 
 
@@ -575,7 +587,11 @@ def main() -> int:
         ) from exc
     if args.limit_duration is not None:
         validate_profile_name(spec, args.profile)
-        spec.setdefault("profiles", {}).setdefault(args.profile, {})["limit_duration"] = args.limit_duration
+        profiles = spec.setdefault("profiles", {})
+        override = profiles.setdefault(args.profile, {})
+        if not isinstance(override, dict):
+            raise SystemExit(f"spec.profiles['{args.profile}'] must be a JSON object")
+        override["limit_duration"] = args.limit_duration
 
     output = resolve_path(str(args.output), spec_path.parent) if args.output else None
     cmd = build_command(spec, spec_path.parent, args.profile, output, args.dry_run)

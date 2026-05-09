@@ -162,11 +162,12 @@ def main() -> int:
 
     payload: dict[str, Any] = {}
     for path in args.paths:
-        data = run_ffprobe(path.expanduser())
-        payload[str(path)] = data
+        expanded = path.expanduser()
+        data = run_ffprobe(expanded)
+        payload[str(expanded)] = data
         if args.json:
             continue
-        print(summarize(path, data))
+        print(summarize(expanded, data))
         print()
 
     if args.json:
