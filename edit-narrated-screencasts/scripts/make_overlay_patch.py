@@ -22,7 +22,10 @@ Image, ImageChops, ImageFilter = load_pillow()
 def parse_bbox(value: str | None) -> tuple[int, int, int, int] | None:
     if not value:
         return None
-    parts = [int(part.strip()) for part in value.split(",")]
+    try:
+        parts = [int(part.strip()) for part in value.split(",")]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"bbox must be integers: {exc}") from exc
     if len(parts) != 4:
         raise argparse.ArgumentTypeError("bbox must be x,y,w,h")
     x, y, w, h = parts

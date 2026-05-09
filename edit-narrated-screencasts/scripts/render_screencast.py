@@ -250,6 +250,10 @@ class RenderBuilder:
         path = resolve_path(card.get("path"), self.base_dir)
         duration = seconds(card.get("duration"), f"{name}.duration")
         fade = seconds(card.get("fade_duration", 1), f"{name}.fade_duration")
+        if fade > duration:
+            raise SystemExit(
+                f"{name}.fade_duration ({fmt(fade)}) must be <= {name}.duration ({fmt(duration)})"
+            )
         require_file(path, f"{name}.path", self.dry_run)
         image_index = self.add_input(path, loop=True, duration=duration)
         label = f"v{name}"
@@ -309,7 +313,7 @@ class RenderBuilder:
             y = int(overlay.get("y", 0))
             start = seconds(overlay.get("start", 0), f"overlays[{index}].start")
             end = seconds(overlay.get("end"), f"overlays[{index}].end")
-            if end < start:
+            if end <= start:
                 raise SystemExit(f"overlays[{index}].end must be greater than start")
             self.filters.append(
                 f"[{label}][{overlay_label}]"
@@ -332,8 +336,12 @@ class RenderBuilder:
 
 
 def merged_profile(spec: dict[str, Any], name: str) -> dict[str, Any]:
-    profile = dict(DEFAULT_PROFILES.get(name, DEFAULT_PROFILES["preview"]))
-    profile.update((spec.get("profiles") or {}).get(name, {}))
+    spec_profiles = spec.get("profiles") or {}
+    if name not in DEFAULT_PROFILES and name not in spec_profiles:
+        known = sorted(set(DEFAULT_PROFILES) | set(spec_profiles))
+        raise SystemExit(f"Unknown profile '{name}'. Known profiles: {', '.join(known)}")
+    profile = dict(DEFAULT_PROFILES.get(name, {}))
+    profile.update(spec_profiles.get(name, {}))
     return profile
 
 

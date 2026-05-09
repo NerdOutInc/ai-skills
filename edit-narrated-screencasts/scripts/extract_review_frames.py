@@ -42,14 +42,19 @@ def load_timestamps(args: argparse.Namespace) -> list[float]:
     values: list[str] = []
     values.extend(args.timestamps or [])
     if args.timestamps_file:
-        for raw in args.timestamps_file.read_text().splitlines():
+        for raw in args.timestamps_file.expanduser().read_text().splitlines():
             clean = raw.split("#", 1)[0].strip()
             if clean:
                 values.append(clean.split()[0])
     if not values:
         raise SystemExit("Provide timestamps with --timestamps or --timestamps-file.")
-    timestamps = sorted(parse_timestamp(value) for value in values)
-    return timestamps
+    parsed: list[float] = []
+    for value in values:
+        try:
+            parsed.append(parse_timestamp(value))
+        except ValueError as exc:
+            raise SystemExit(f"Invalid timestamp '{value}': {exc}") from exc
+    return sorted(parsed)
 
 
 def run_command(cmd: list[str], dry_run: bool) -> None:
