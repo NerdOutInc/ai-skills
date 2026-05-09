@@ -201,6 +201,16 @@ def seconds(value: Any, label: str, *, positive: bool = False) -> float:
     return result
 
 
+def positive_int(value: Any, label: str) -> int:
+    try:
+        result = int(value)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"{label} must be an integer") from exc
+    if result <= 0:
+        raise SystemExit(f"{label} must be greater than 0")
+    return result
+
+
 def fmt(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".")
 
@@ -254,10 +264,12 @@ class RenderBuilder:
         width = timeline.get("width")
         height = timeline.get("height")
         if width and height:
+            w = positive_int(width, "timeline.width")
+            h = positive_int(height, "timeline.height")
             return (
-                f"{label}scale={int(width)}:{int(height)}:"
+                f"{label}scale={w}:{h}:"
                 "force_original_aspect_ratio=decrease,"
-                f"pad={int(width)}:{int(height)}:(ow-iw)/2:(oh-ih)/2,"
+                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,"
             )
         return label
 
@@ -510,7 +522,16 @@ def main() -> int:
     args = parser.parse_args()
 
     spec_path = args.spec.expanduser()
-    spec = json.loads(spec_path.read_text())
+    try:
+        spec_text = spec_path.read_text()
+    except OSError as exc:
+        raise SystemExit(f"Could not read spec {spec_path}: {exc}") from exc
+    try:
+        spec = json.loads(spec_text)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(
+            f"Invalid JSON in spec {spec_path} (line {exc.lineno}, col {exc.colno}): {exc.msg}"
+        ) from exc
     if args.limit_duration is not None:
         validate_profile_name(spec, args.profile)
         spec.setdefault("profiles", {}).setdefault(args.profile, {})["limit_duration"] = args.limit_duration

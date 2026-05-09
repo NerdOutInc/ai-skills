@@ -83,13 +83,20 @@ def extract_frames(video: Path, output_dir: Path, timestamps: list[float], args:
     for index, seconds in enumerate(timestamps, start=1):
         label = timestamp_label(seconds)
         frame = output_dir / f"{args.prefix}_{index:03d}_{label}.jpg"
+        # Fast-seek to a keyframe near the target, then accurate-seek the
+        # remainder so the extracted frame matches the requested timestamp
+        # even when the source has long GOPs (common in screen recordings).
+        coarse = max(0.0, seconds - 5.0)
+        fine = seconds - coarse
         cmd = [
             ffmpeg,
             "-y",
             "-ss",
-            f"{seconds:.3f}",
+            f"{coarse:.3f}",
             "-i",
             str(video),
+            "-ss",
+            f"{fine:.3f}",
             "-frames:v",
             "1",
             "-q:v",
