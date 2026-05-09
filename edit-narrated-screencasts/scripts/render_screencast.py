@@ -316,8 +316,13 @@ class RenderBuilder:
                 if end <= start:
                     raise SystemExit(f"segments[{index}].end must be greater than start")
                 multiplier = segment.get("setpts_multiplier")
+                speed_value = segment.get("speed")
+                if multiplier is not None and speed_value is not None:
+                    raise SystemExit(
+                        f"segments[{index}] must provide either 'speed' or 'setpts_multiplier', not both"
+                    )
                 if multiplier is None:
-                    speed = seconds(segment.get("speed", 1), f"segments[{index}].speed", positive=True)
+                    speed = seconds(speed_value if speed_value is not None else 1, f"segments[{index}].speed", positive=True)
                     multiplier = 1 / speed
                 multiplier = seconds(multiplier, f"segments[{index}].setpts_multiplier", positive=True)
                 pad_after = seconds(segment.get("clone_pad_after", 0), f"segments[{index}].clone_pad_after")
