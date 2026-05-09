@@ -266,8 +266,10 @@ class RenderBuilder:
         self.filters: list[str] = []
         self.input_count = 0
         self.image_inputs: dict[tuple[str, float | None], int] = {}
+        self.tracked_inputs: list[tuple[str, Path]] = []
 
-    def add_input(self, path: Path, *, loop: bool = False, duration: float | None = None) -> int:
+    def add_input(self, path: Path, *, label: str, loop: bool = False, duration: float | None = None) -> int:
+        self.tracked_inputs.append((label, path))
         key = (str(path), duration if loop else None)
         if loop and key in self.image_inputs:
             return self.image_inputs[key]
@@ -342,7 +344,7 @@ class RenderBuilder:
                 path = resolve_path(segment.get("path"), self.base_dir, f"segments[{index}].path")
                 duration = seconds(segment.get("duration"), f"segments[{index}].duration", positive=True)
                 require_file(path, f"segments[{index}].path", self.dry_run)
-                image_index = self.add_input(path, loop=True, duration=duration)
+                image_index = self.add_input(path, label=f"segments[{index}].path", loop=True, duration=duration)
                 chain = (
                     f"[{image_index}:v]"
                     f"trim=duration={fmt(duration)},setpts=PTS-STARTPTS,"
@@ -370,7 +372,7 @@ class RenderBuilder:
                 f"{name}.fade_duration ({fmt(fade)}) must be <= {name}.duration ({fmt(duration)})"
             )
         require_file(path, f"{name}.path", self.dry_run)
-        image_index = self.add_input(path, loop=True, duration=duration)
+        image_index = self.add_input(path, label=f"{name}.path", loop=True, duration=duration)
         label = f"v{name}"
         chain = (
             f"[{image_index}:v]"
@@ -408,6 +410,10 @@ class RenderBuilder:
         outro = timeline.get("outro")
         if outro:
             outro_label, outro_duration, outro_fade = self.make_card(outro, "outro")
+            if outro_fade - current_duration > TIMING_TOLERANCE:
+                raise SystemExit(
+                    f"outro.fade_duration ({fmt(outro_fade)}) must be <= preceding-content duration ({fmt(current_duration)})"
+                )
             offset = seconds(outro.get("offset", current_duration - outro_fade), "outro.offset")
             max_offset = current_duration - outro_fade
             if offset - max_offset > TIMING_TOLERANCE:
@@ -431,7 +437,7 @@ class RenderBuilder:
         for index, overlay in enumerate(overlays):
             path = resolve_path(overlay.get("path"), self.base_dir, f"overlays[{index}].path")
             require_file(path, f"overlays[{index}].path", self.dry_run)
-            image_index = self.add_input(path, loop=True)
+            image_index = self.add_input(path, label=f"overlays[{index}].path", loop=True)
             overlay_label = f"overlay{index}"
             self.filters.append(f"[{image_index}:v]setpts=PTS-STARTPTS,format=rgba[{overlay_label}]")
             next_label = f"voverlay{index}"
@@ -484,12 +490,12 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     source_audio = resolve_path(inputs.get("audio"), base_dir, "inputs.audio")
     require_file(source_video, "inputs.video", dry_run)
     ensure_timeline_defaults(spec, source_video)
-    video_index = builder.add_input(source_video)
+    video_index = builder.add_input(source_video, label="inputs.video")
 
     audio_index: int | None = None
     if source_audio:
         require_file(source_audio, "inputs.audio", dry_run)
-        audio_index = builder.add_input(source_audio)
+        audio_index = builder.add_input(source_audio, label="inputs.audio")
 
     body_label, body_duration = builder.make_body(video_index)
     composite_label, _ = builder.add_intro_outro(body_label, body_duration)
@@ -499,7 +505,7 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     output = output_override or resolve_path(spec.get("output"), base_dir, "spec.output")
     if not output:
         raise SystemExit("Provide spec.output or --output")
-    reject_output_overwriting_inputs(output, [("inputs.video", source_video), ("inputs.audio", source_audio)])
+    reject_output_overwriting_inputs(output, builder.tracked_inputs)
     if not dry_run and has_unexpanded_env_var(output):
         raise SystemExit(f"Output path contains an unset environment variable: {output}")
     if not dry_run:
