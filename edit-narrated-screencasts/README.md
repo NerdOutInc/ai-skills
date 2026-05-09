@@ -55,6 +55,10 @@ here so you can pre-install them once and skip the prompt on every session.
 
 ### Required
 
+- **Python 3.10 or newer** - the bundled scripts use modern type-hint syntax.
+  macOS 13+ ships a compatible `python3`; otherwise `brew install python` will
+  install a recent version.
+
 - **[ffmpeg](https://www.ffmpeg.org)** (provides `ffprobe`) - media inspection,
   frame extraction, contact sheets, timeline rendering, and MP4 output:
 

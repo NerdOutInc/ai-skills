@@ -487,7 +487,7 @@ def merged_profile(spec: dict[str, Any], name: str) -> dict[str, Any]:
     return profile
 
 
-def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, output_override: Path | None, dry_run: bool) -> list[str]:
+def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, output_override: Path | None, dry_run: bool, overwrite: bool = False) -> list[str]:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         if not dry_run:
@@ -520,6 +520,8 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     reject_output_overwriting_inputs(output, builder.tracked_inputs)
     if not dry_run and has_unexpanded_env_var(output):
         raise SystemExit(f"Output path contains an unset environment variable: {output}")
+    if not dry_run and output.exists() and not overwrite:
+        raise SystemExit(f"Output already exists: {output}. Pass --overwrite to replace it.")
     if not dry_run:
         output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -572,6 +574,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, help="Override output path")
     parser.add_argument("--limit-duration", type=float, help="Temporary output duration cap")
     parser.add_argument("--dry-run", action="store_true", help="Print command without running ffmpeg")
+    parser.add_argument("--overwrite", action="store_true", help="Replace the output file if it already exists")
     args = parser.parse_args()
 
     spec_path = args.spec.expanduser()
@@ -594,7 +597,7 @@ def main() -> int:
         override["limit_duration"] = args.limit_duration
 
     output = resolve_path(str(args.output), spec_path.parent) if args.output else None
-    cmd = build_command(spec, spec_path.parent, args.profile, output, args.dry_run)
+    cmd = build_command(spec, spec_path.parent, args.profile, output, args.dry_run, args.overwrite)
     print(shlex.join(cmd), flush=True)
     if args.dry_run:
         return 0
