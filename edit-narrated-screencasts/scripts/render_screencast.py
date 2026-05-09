@@ -475,7 +475,7 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     if audio_index is not None:
         audio_codec = str(profile.get("audio_codec", "copy"))
         audio_bitrate = profile.get("audio_bitrate")
-        if audio_codec == "copy" and source_audio and not dry_run:
+        if audio_codec == "copy" and source_audio and source_audio.exists():
             detected = detect_audio_codec(source_audio)
             if detected and detected != "aac":
                 print(

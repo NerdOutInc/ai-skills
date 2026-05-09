@@ -62,7 +62,8 @@ here so you can pre-install them once and skip the prompt on every session.
   brew install ffmpeg
   ```
 
-- **[Pillow](https://python-pillow.org)** - transparent overlay patch creation:
+- **[Pillow](https://python-pillow.org)** - contact sheet generation and
+  transparent overlay patch creation:
 
   ```bash
   python3 -m pip install pillow
