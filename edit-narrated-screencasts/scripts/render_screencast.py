@@ -228,6 +228,19 @@ def fmt(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".")
 
 
+def ffmpeg_error_message(exc: subprocess.CalledProcessError) -> str:
+    stderr = (exc.stderr or "").strip()
+    if not stderr:
+        return f"ffmpeg failed with exit code {exc.returncode}"
+    lines = stderr.splitlines()
+    if len(lines) > 20:
+        lines = lines[-20:]
+    snippet = "\n".join(lines)
+    if len(snippet) > 4000:
+        snippet = snippet[-4000:]
+    return f"ffmpeg failed with exit code {exc.returncode}\n\nffmpeg stderr:\n{snippet}"
+
+
 def require_dict(value: Any, label: str) -> dict[str, Any]:
     if value is None:
         return {}
@@ -407,7 +420,7 @@ class RenderBuilder:
         current_duration = body_duration
 
         intro = timeline.get("intro")
-        if intro:
+        if intro is not None:
             intro = require_dict(intro, "timeline.intro")
             intro_label, intro_duration, intro_fade = self.make_card(intro, "intro")
             offset = seconds(intro.get("offset", intro_duration - intro_fade), "intro.offset")
@@ -427,7 +440,7 @@ class RenderBuilder:
             current_duration = offset + current_duration
 
         outro = timeline.get("outro")
-        if outro:
+        if outro is not None:
             outro = require_dict(outro, "timeline.outro")
             outro_label, outro_duration, outro_fade = self.make_card(outro, "outro")
             if outro_fade - current_duration > TIMING_TOLERANCE:
@@ -508,7 +521,7 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     profile = merged_profile(spec, profile_name)
     builder = RenderBuilder(spec, base_dir, profile, dry_run)
 
-    require_dict(spec.get("timeline"), "spec.timeline")
+    spec["timeline"] = require_dict(spec.get("timeline"), "spec.timeline")
     inputs = require_dict(spec.get("inputs"), "spec.inputs")
     source_video = resolve_path(inputs.get("video"), base_dir, "inputs.video")
     source_audio = resolve_path(inputs.get("audio"), base_dir, "inputs.audio")
@@ -570,8 +583,9 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
         cmd.extend(["-movflags", "+faststart"])
     if profile.get("shortest", True):
         cmd.append("-shortest")
-    if profile.get("limit_duration"):
-        cmd.extend(["-t", fmt(seconds(profile["limit_duration"], "profile.limit_duration"))])
+    limit_duration = profile.get("limit_duration")
+    if limit_duration is not None:
+        cmd.extend(["-t", fmt(seconds(limit_duration, "profile.limit_duration", positive=True))])
 
     cmd.append(str(output))
     return cmd
@@ -598,9 +612,13 @@ def main() -> int:
         raise SystemExit(
             f"Invalid JSON in spec {spec_path} (line {exc.lineno}, col {exc.colno}): {exc.msg}"
         ) from exc
+    if not isinstance(spec, dict):
+        raise SystemExit("spec must be a JSON object")
     if args.limit_duration is not None:
         validate_profile_name(spec, args.profile)
         profiles = spec.setdefault("profiles", {})
+        if not isinstance(profiles, dict):
+            raise SystemExit("spec.profiles must be a JSON object mapping profile names to settings")
         override = profiles.setdefault(args.profile, {})
         if not isinstance(override, dict):
             raise SystemExit(f"spec.profiles['{args.profile}'] must be a JSON object")
@@ -612,9 +630,9 @@ def main() -> int:
     if args.dry_run:
         return 0
     try:
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
     except subprocess.CalledProcessError as exc:
-        raise SystemExit(f"ffmpeg failed with exit code {exc.returncode}")
+        raise SystemExit(ffmpeg_error_message(exc))
     return 0
 
 

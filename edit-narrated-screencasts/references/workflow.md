@@ -31,8 +31,9 @@ Record:
   MP4-compatible), the renderer will auto-fall back from
   `audio_codec: copy` to `aac` re-encoding with a printed warning. To skip
   the warning, set `audio_codec: aac` explicitly in the HQ profile.
-- Whether the video has embedded audio that should be ignored (the renderer
-  drops embedded audio whenever `inputs.audio` is provided).
+- Whether the video has embedded audio that should be ignored. The renderer
+  does not map embedded source-video audio; provide narration or replacement
+  audio with `inputs.audio` when the output should include audio.
 - The target output resolution and frame rate.
 
 Keep the original source files untouched.

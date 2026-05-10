@@ -83,9 +83,20 @@ def run_command(cmd: list[str], dry_run: bool) -> None:
     if dry_run:
         return
     try:
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
     except subprocess.CalledProcessError as exc:
-        raise SystemExit(f"ffmpeg failed with exit code {exc.returncode}")
+        stderr = (exc.stderr or "").strip()
+        if not stderr:
+            raise SystemExit(f"ffmpeg failed with exit code {exc.returncode}") from exc
+        lines = stderr.splitlines()
+        if len(lines) > 20:
+            lines = lines[-20:]
+        snippet = "\n".join(lines)
+        if len(snippet) > 4000:
+            snippet = snippet[-4000:]
+        raise SystemExit(
+            f"ffmpeg failed with exit code {exc.returncode}\n\nffmpeg stderr:\n{snippet}"
+        ) from exc
 
 
 def extract_frames(video: Path, output_dir: Path, timestamps: list[float], args: argparse.Namespace) -> list[Path]:
