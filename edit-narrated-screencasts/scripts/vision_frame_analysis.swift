@@ -27,7 +27,8 @@ func jsonObject(_ data: [String: Any]) -> String {
         let encoded = try JSONSerialization.data(withJSONObject: data, options: [.sortedKeys])
         return String(data: encoded, encoding: .utf8) ?? "{}"
     } catch {
-        return "{\"error\":\"Could not encode JSON: \(error)\"}"
+        fputs("Could not encode JSON: \(error)\n", stderr)
+        return "{\"error\":\"Could not encode JSON\"}"
     }
 }
 
