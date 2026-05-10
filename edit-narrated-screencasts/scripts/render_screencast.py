@@ -6,8 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
-import re
 import shlex
 import shutil
 import subprocess
@@ -37,8 +35,6 @@ DEFAULT_PROFILES: dict[str, dict[str, Any]] = {
 }
 
 TIMING_TOLERANCE = 1e-6
-UNEXPANDED_POSIX_VAR_PATTERN = re.compile(r"(?<!\\)\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)")
-UNEXPANDED_WINDOWS_VAR_PATTERN = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*%")
 
 
 def detect_audio_codec(path: Path) -> str | None:
@@ -180,16 +176,10 @@ def resolve_path(value: Any, base: Path, label: str = "path") -> Path | None:
         return None
     if not isinstance(value, str):
         raise SystemExit(f"{label} must be a string path")
-    expanded = os.path.expandvars(value)
-    path = Path(expanded).expanduser()
+    path = Path(value).expanduser()
     if not path.is_absolute():
         path = base / path
     return path
-
-
-def has_unexpanded_env_var(path: Path) -> bool:
-    text = str(path)
-    return bool(UNEXPANDED_POSIX_VAR_PATTERN.search(text) or UNEXPANDED_WINDOWS_VAR_PATTERN.search(text))
 
 
 def require_file(path: Path | None, label: str, dry_run: bool) -> None:
@@ -518,8 +508,6 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     if not output:
         raise SystemExit("Provide spec.output or --output")
     reject_output_overwriting_inputs(output, builder.tracked_inputs)
-    if not dry_run and has_unexpanded_env_var(output):
-        raise SystemExit(f"Output path contains an unset environment variable: {output}")
     if not dry_run and output.exists() and not overwrite:
         raise SystemExit(f"Output already exists: {output}. Pass --overwrite to replace it.")
     if not dry_run:

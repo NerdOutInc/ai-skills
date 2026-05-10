@@ -1,26 +1,26 @@
 # Paperless NGX Case Study
 
 This case study records the workflow used for a Paperless NGX narrated
-screencast. It is a worked example, not a runnable tutorial: it
-references local media that lives on the original author's machine. The
-example spec under `assets/examples/paperless-ngx/` substitutes environment
-variables for the absolute paths so it can be inspected (and `--dry-run`'d)
-without those files.
+screencast. It is a worked example, not a runnable tutorial: it references
+local media that lives on the original author's machine. The example spec
+under `assets/examples/paperless-ngx/` uses placeholder absolute paths
+(`/path/to/...`) so it can be inspected and `--dry-run`'d without those
+files; replace them with real paths to your own media to run end-to-end.
 
-## Source Media (placeholder env vars)
+## Source Media
 
-The example spec uses these environment variables. Set them to your own files
-to run the spec end-to-end:
+The example spec references these files. Replace each `/path/to/...` with
+your own absolute path:
 
-| Env var | Original role |
+| Placeholder | Original role |
 | --- | --- |
-| `$PAPERLESS_SOURCE_VIDEO` | Source screencast (3600x2160, 60 fps, ~48.7s). |
-| `$PAPERLESS_NARRATION` | Narration m4a (~92.18s). |
-| `$PAPERLESS_FREEZE_DOC_LIST` | Clean document-list freeze frame, 4K. |
-| `$PAPERLESS_INTRO_CARD` | Rendered intro PNG (4K). |
-| `$PAPERLESS_OUTRO_CARD` | Rendered outro PNG (4K). |
-| `$PAPERLESS_TOOLTIP_PATCH` | Transparent overlay PNG hiding the tooltip and green artifact. |
-| `$PAPERLESS_OUTPUT` | Output path for the rendered MP4. |
+| `/path/to/source-screencast.mp4` | Source screencast (3600x2160, 60 fps, ~48.7s). |
+| `/path/to/narration.m4a` | Narration audio (~92.18s). |
+| `/path/to/freeze-doc-list.png` | Clean document-list freeze frame, 4K. |
+| `/path/to/intro-card.png` | Rendered intro PNG (4K). |
+| `/path/to/outro-card.png` | Rendered outro PNG (4K). |
+| `/path/to/tooltip-patch.png` | Transparent overlay PNG hiding the tooltip and green artifact. |
+| `/path/to/paperless-ngx-screencast.mp4` | Output path for the rendered MP4. |
 
 Observed source facts:
 
@@ -91,5 +91,5 @@ python3 "$SKILL_DIR/scripts/render_screencast.py" \
   --dry-run
 ```
 
-Set the `$PAPERLESS_*` env vars (see the table above) before running the
-spec without `--dry-run`.
+Replace the `/path/to/...` placeholders in the spec with real absolute paths
+before running it without `--dry-run`.

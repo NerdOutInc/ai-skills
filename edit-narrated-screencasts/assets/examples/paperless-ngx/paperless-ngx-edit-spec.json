@@ -1,8 +1,8 @@
 {
-  "output": "$PAPERLESS_OUTPUT",
+  "output": "/path/to/paperless-ngx-screencast.mp4",
   "inputs": {
-    "video": "$PAPERLESS_SOURCE_VIDEO",
-    "audio": "$PAPERLESS_NARRATION"
+    "video": "/path/to/source-screencast.mp4",
+    "audio": "/path/to/narration.m4a"
   },
   "timeline": {
     "width": 3600,
@@ -48,7 +48,7 @@
       },
       {
         "type": "freeze",
-        "path": "$PAPERLESS_FREEZE_DOC_LIST",
+        "path": "/path/to/freeze-doc-list.png",
         "duration": 11.88
       },
       {
@@ -66,20 +66,20 @@
       }
     ],
     "intro": {
-      "path": "$PAPERLESS_INTRO_CARD",
+      "path": "/path/to/intro-card.png",
       "duration": 4,
       "fade_duration": 1,
       "offset": 3
     },
     "outro": {
-      "path": "$PAPERLESS_OUTRO_CARD",
+      "path": "/path/to/outro-card.png",
       "duration": 3.871552,
       "fade_duration": 1,
       "offset": 88.311668
     },
     "overlays": [
       {
-        "path": "$PAPERLESS_TOOLTIP_PATCH",
+        "path": "/path/to/tooltip-patch.png",
         "start": 35.7,
         "end": 55.8,
         "x": 0,
