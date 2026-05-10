@@ -51,6 +51,17 @@ def parse_bbox(value: str | None) -> tuple[int, int, int, int] | None:
     return x, y, w, h
 
 
+def normalized_path(path: Path) -> Path:
+    return path.expanduser().resolve(strict=False)
+
+
+def reject_output_overwriting_inputs(output: Path, inputs: list[tuple[str, Path | None]]) -> None:
+    output_path = normalized_path(output)
+    for label, input_path in inputs:
+        if input_path and output_path == normalized_path(input_path):
+            raise SystemExit(f"Output path must not overwrite {label}: {output}")
+
+
 def make_bbox_mask(image_module: object, size: tuple[int, int], bbox: tuple[int, int, int, int]) -> object:
     image_new = getattr(image_module, "new")
     mask = image_new("L", size, 0)
@@ -99,6 +110,7 @@ def main() -> int:
     if not dirty_path.exists():
         raise SystemExit(f"Dirty frame not found: {dirty_path}")
 
+    mask_path: Path | None = None
     clean = Image.open(clean_path).convert("RGBA")
     dirty = Image.open(dirty_path).convert("RGBA")
     if clean.size != dirty.size:
@@ -119,6 +131,16 @@ def main() -> int:
     else:
         raise SystemExit("Provide --bbox, --mask, or --diff-alpha.")
 
+    output = args.output.expanduser()
+    reject_output_overwriting_inputs(
+        output,
+        [
+            ("clean frame", clean_path),
+            ("dirty frame", dirty_path),
+            ("mask", mask_path),
+        ],
+    )
+
     alpha_bbox = mask.getbbox()
     print(f"Patch size: {clean.size[0]}x{clean.size[1]}")
     print(f"Alpha bbox: {alpha_bbox}")
@@ -128,7 +150,6 @@ def main() -> int:
     patch = Image.new("RGBA", clean.size, (0, 0, 0, 0))
     patch.alpha_composite(clean)
     patch.putalpha(mask)
-    output = args.output.expanduser()
     output.parent.mkdir(parents=True, exist_ok=True)
     patch.save(output)
     print(f"Patch written: {output}")

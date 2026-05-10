@@ -228,17 +228,40 @@ def fmt(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".")
 
 
-def ffmpeg_error_message(exc: subprocess.CalledProcessError) -> str:
-    stderr = (exc.stderr or "").strip()
+FFMPEG_ERROR_TAIL_BYTES = 4000
+
+
+def ffmpeg_error_message(returncode: int, stderr: str | None) -> str:
+    stderr = (stderr or "").strip()
     if not stderr:
-        return f"ffmpeg failed with exit code {exc.returncode}"
+        return f"ffmpeg failed with exit code {returncode}"
     lines = stderr.splitlines()
     if len(lines) > 20:
         lines = lines[-20:]
     snippet = "\n".join(lines)
     if len(snippet) > 4000:
         snippet = snippet[-4000:]
-    return f"ffmpeg failed with exit code {exc.returncode}\n\nffmpeg stderr:\n{snippet}"
+    return f"ffmpeg failed with exit code {returncode}\n\nffmpeg stderr:\n{snippet}"
+
+
+def run_ffmpeg(cmd: list[str]) -> None:
+    tail = bytearray()
+    with subprocess.Popen(cmd, stderr=subprocess.PIPE) as process:
+        assert process.stderr is not None
+        while True:
+            chunk = process.stderr.read(8192)
+            if not chunk:
+                break
+            sys.stderr.buffer.write(chunk)
+            sys.stderr.buffer.flush()
+            tail.extend(chunk)
+            if len(tail) > FFMPEG_ERROR_TAIL_BYTES:
+                del tail[: len(tail) - FFMPEG_ERROR_TAIL_BYTES]
+        returncode = process.wait()
+
+    if returncode != 0:
+        stderr_tail = tail.decode(errors="replace")
+        raise SystemExit(ffmpeg_error_message(returncode, stderr_tail))
 
 
 def require_dict(value: Any, label: str) -> dict[str, Any]:
@@ -629,10 +652,7 @@ def main() -> int:
     print(shlex.join(cmd), flush=True)
     if args.dry_run:
         return 0
-    try:
-        subprocess.run(cmd, check=True, stderr=subprocess.PIPE, text=True)
-    except subprocess.CalledProcessError as exc:
-        raise SystemExit(ffmpeg_error_message(exc))
+    run_ffmpeg(cmd)
     return 0
 
 
