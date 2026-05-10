@@ -454,7 +454,7 @@ def add_time(times: dict[float, str], time: float, role: str, duration: float) -
     times[clamped] = role
 
 
-def selected_vision_times(
+def required_vision_times(
     duration: float,
     scenes: list[DiffPoint],
     holds: list[HoldSpan],
@@ -475,6 +475,16 @@ def selected_vision_times(
             f"--max-vision-frames={args.max_vision_frames}. Increase --max-vision-frames, "
             "increase --min-event-gap, or increase --min-hold-duration."
         )
+    return mandatory
+
+
+def selected_vision_times(
+    duration: float,
+    scenes: list[DiffPoint],
+    holds: list[HoldSpan],
+    args: argparse.Namespace,
+) -> dict[float, str]:
+    mandatory = required_vision_times(duration, scenes, holds, args)
 
     anchors: dict[float, str] = {}
     for time in time_range(0.0, duration, args.vision_interval):
@@ -591,8 +601,9 @@ def build_events(
     stable_threshold_hint: float,
 ) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
+    usable_records = [record for record in records if not record.get("error")]
     for scene in scenes:
-        record = nearest_record(records, scene.time)
+        record = nearest_record(usable_records, scene.time)
         score = scene.score
         feature_distance = record.get("feature_distance_from_previous") if record else None
         if isinstance(feature_distance, (int, float)):
@@ -608,7 +619,7 @@ def build_events(
         )
 
     for hold in holds:
-        record = nearest_record(records, hold.mid)
+        record = nearest_record(usable_records, hold.mid)
         score = max(
             0.0,
             min(1.0, 1.0 - hold.mean_score / max(stable_threshold_hint, 0.001)),
@@ -626,7 +637,6 @@ def build_events(
         )
         events[-1]["start"] = round(hold.start, 3)
 
-    usable_records = [record for record in records if not record.get("error")]
     for previous, current in zip(usable_records, usable_records[1:]):
         previous_text = str(previous.get("ocr_text") or "")
         current_text = str(current.get("ocr_text") or "")
@@ -752,6 +762,8 @@ def main() -> int:
     diffs = consecutive_diffs(scan_frames, Image, ImageChops, ImageStat)
     scene_candidates, scene_threshold = detect_scene_candidates(diffs, args.min_event_gap)
     holds, stable_threshold = detect_stable_holds(diffs, args.min_hold_duration)
+    # Fail before costly refinement if required event/hold samples already exceed the cap.
+    required_vision_times(duration, scene_candidates, holds, args)
 
     refined_scenes = [
         refine_scene_candidate(

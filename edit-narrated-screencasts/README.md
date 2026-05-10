@@ -8,7 +8,7 @@ intro/outro stills, transparent artifact patches, preview renders, HQ renders,
 and timestamp contact-sheet verification.
 
 This skill is macOS-only because its screen analysis uses Apple Vision through
-bundled Swift helpers.
+a bundled Swift helper.
 
 The full agent instructions live in [`SKILL.md`](SKILL.md).
 
