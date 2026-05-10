@@ -513,7 +513,7 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     if not dry_run:
         output.parent.mkdir(parents=True, exist_ok=True)
 
-    cmd = [ffmpeg, "-y", *builder.input_args, "-filter_complex", ";".join(builder.filters)]
+    cmd = [ffmpeg, "-y" if overwrite else "-n", *builder.input_args, "-filter_complex", ";".join(builder.filters)]
     cmd.extend(["-map", f"[{final_label}]"])
     if audio_index is not None:
         cmd.extend(["-map", f"{audio_index}:a:0"])
