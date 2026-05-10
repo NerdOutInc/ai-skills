@@ -2,10 +2,11 @@
 name: edit-narrated-screencasts
 description: >
   Edit narrated screencasts by syncing existing narration to screen actions,
-  retiming footage, inserting freeze frames, patching visual artifacts such as
-  hover tooltips, optionally adding user-supplied intro/outro stills, and
-  rendering preview or high-quality MP4 outputs. Use when asked to combine a
-  voiceover with existing screen recording footage or polish a screencast edit.
+  analyzing screen events with Apple Vision, retiming footage, inserting freeze
+  frames, patching visual artifacts such as hover tooltips, optionally adding
+  user-supplied intro/outro stills, and rendering preview or high-quality MP4
+  outputs. Use when asked to combine a voiceover with existing screen recording
+  footage or polish a screencast edit.
 disable-model-invocation: true
 ---
 
@@ -15,6 +16,9 @@ Use this skill when the user has an existing screencast and narration audio and
 wants them turned into a cohesive edited video. The default workflow is
 iterative: inspect first, generate a low-quality preview for timing review, then
 render the high-quality final only after the user accepts the edit.
+
+This skill is macOS-only because screen analysis uses Apple Vision through a
+bundled Swift helper.
 
 ## Workflow
 
@@ -42,10 +46,22 @@ Follow each phase in order.
      `--no-install` in locked-down environments or when dependencies must be
      preinstalled manually.
 
+3. Analyze screen events with `scripts/analyze_screen_events.py` before building
+   the timing map.
+   - Run `python3 "$SKILL_DIR/scripts/analyze_screen_events.py" --video source.mp4 --out /tmp/my-edit/screen-analysis`.
+   - Use `/tmp/my-edit/screen-analysis/screen-events.json` and
+     `/tmp/my-edit/screen-analysis/screen-events-contact-sheet.jpg` as evidence
+     for scene changes, stable holds, OCR text changes, and representative
+     frames.
+   - Treat the analysis as evidence, not final alignment. Verify important
+     timestamps visually before rendering.
+
 ### Phase 2 — Edit
 
-3. Build a timing map.
+4. Build a timing map.
    - Mark narration beats and the matching screen actions.
+   - Use `screen-events.json` to identify likely source-video action
+     boundaries, loading waits, state changes, and freeze-frame candidates.
    - If narration and screen actions do not align, notify the user and suggest
      adjustments to either the narration or the video.
    - Identify long waits that can be sped up, actions that need more breathing
@@ -53,7 +69,7 @@ Follow each phase in order.
    - Keep a simple table of source time, output time, action, narration cue,
      and edit operation.
 
-4. Create supporting stills.
+5. Create supporting stills.
    - If the user asks for intro/outro stills, treat them as project-specific
      still assets. Use supplied artwork, inspect the user's actual brand/source
      files, or create one-off images in the requested output directory. Do not
@@ -65,19 +81,19 @@ Follow each phase in order.
 
 ### Phase 3 — Render
 
-5. Render a preview first.
+6. Render a preview first.
    - Use `scripts/render_screencast.py --profile preview`.
    - Share the preview path and ask the user to review timing, text, fades, and
      patched areas.
    - Expect several rounds of small timing/design adjustments.
 
-6. Render HQ after approval.
+7. Render HQ after approval.
    - Use `scripts/render_screencast.py --profile hq`.
    - Prefer H.264, `-preset slow`, `-crf 18`, original FPS, `yuv420p`, and audio
      stream copy when the audio is already AAC (m4a/MP4-compatible).
    - Use `-movflags +faststart` for shareable MP4 output.
 
-7. Verify the final.
+8. Verify the final.
    - Probe the final file.
    - Generate a contact sheet around intros, fades, patches, important actions,
      and the outro.
@@ -86,6 +102,8 @@ Follow each phase in order.
 ## Hard Rules
 
 - Never overwrite the user's original video or audio.
+- Run this skill on macOS. Screen analysis requires Apple Vision and the Swift
+  runtime from macOS Command Line Tools.
 - Keep large generated media out of the skill repository.
 - Put preview renders, final renders, extracted frames, generated stills, and
   temporary stills in a user-specified output directory.
@@ -111,6 +129,10 @@ Follow each phase in order.
 - `scripts/probe_media.py`: summarize source video/audio metadata.
 - `scripts/transcribe_narration.py`: transcribe narration with local
   whisper.cpp and write normalized `transcript.json`.
+- `scripts/analyze_screen_events.py`: sample the source video, run Apple Vision
+  screen analysis, and write `screen-events.json` plus a contact sheet.
+- `scripts/vision_frame_analysis.swift`: Apple Vision OCR and feature-print
+  analysis for sampled frames.
 - `scripts/extract_review_frames.py`: extract timestamped frames and contact
   sheets for review. Automatically installs Pillow when a contact sheet is
   requested and Pillow is missing.

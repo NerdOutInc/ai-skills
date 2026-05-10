@@ -7,14 +7,17 @@ requiring a new recording.
 ## 0. Check Dependencies
 
 The rendering and frame-review scripts depend on `ffmpeg` (with `ffprobe`) and
-Python's Pillow library. The transcription helper can automatically install
-`ffmpeg`, `whisper-cpp`, and the default Whisper model when needed on macOS with
-Homebrew. Pillow-using helpers can automatically install Pillow with the active
-Python when needed. Use `--no-install` in locked-down environments.
+Python's Pillow library. Screen analysis requires macOS, Swift from the macOS
+Command Line Tools, and Apple Vision. The transcription helper can
+automatically install `ffmpeg`, `whisper-cpp`, and the default Whisper model
+when needed on macOS with Homebrew. Pillow-using helpers can automatically
+install Pillow with the active Python when needed. Use `--no-install` in
+locked-down environments.
 
 ```bash
 command -v ffmpeg
 command -v ffprobe
+command -v swift
 python3 -c "import PIL" 2>/dev/null && echo "Pillow OK" || echo "Pillow missing"
 ```
 
@@ -56,6 +59,19 @@ Record:
 - The target output resolution and frame rate.
 - Transcript cues and timestamps from `transcript.json`.
 
+Then analyze the source video:
+
+```bash
+python3 "$SKILL_DIR/scripts/analyze_screen_events.py" \
+  --video source.mp4 \
+  --out /tmp/my-edit/screen-analysis
+```
+
+Use `/tmp/my-edit/screen-analysis/screen-events.json` and the contact sheet to
+review likely scene changes, stable holds/load waits, OCR text changes, and
+representative frames. This output is evidence for the timing map, not the final
+edit decision.
+
 Keep the original source files untouched.
 
 ## 2. Build a Timing Map
@@ -67,6 +83,15 @@ Create a simple table with these columns:
 - Matching source-video action.
 - Source time range.
 - Edit operation.
+
+Use `screen-events.json` to choose candidate source ranges:
+
+- `scene_change` marks likely action/page/modal boundaries.
+- `stable_hold` marks waits that may be sped up, trimmed, or replaced with a
+  freeze frame while narration continues.
+- `ocr_change` marks visible text or state changes that can confirm the screen
+  now matches a narration phrase.
+- `anchor` frames are regular reference samples for visual review.
 
 Common operations:
 

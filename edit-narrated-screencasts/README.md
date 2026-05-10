@@ -2,9 +2,13 @@
 
 A skill that helps AI agents turn an existing screen recording and separately
 recorded narration into a polished screencast edit. It guides media inspection,
-narration/action timing maps, clip retiming, freeze frames, optional
-project-specific intro/outro stills, transparent artifact patches, preview
-renders, HQ renders, and timestamp contact-sheet verification.
+local narration transcription, Apple Vision screen analysis, narration/action
+timing maps, clip retiming, freeze frames, optional project-specific
+intro/outro stills, transparent artifact patches, preview renders, HQ renders,
+and timestamp contact-sheet verification.
+
+This skill is macOS-only because its screen analysis uses Apple Vision through
+bundled Swift helpers.
 
 The full agent instructions live in [`SKILL.md`](SKILL.md).
 
@@ -35,14 +39,16 @@ A typical session:
    for duration, resolution, frame rate, codecs, bitrate, and embedded audio.
 2. **Narration transcription.** The agent transcribes the narration locally and
    uses `transcript.json` to anchor the timing map.
-3. **Timing map.** The agent builds a simple source-time to output-time map so
+3. **Screen analysis.** The agent samples the video with Apple Vision to detect
+   scene changes, stable holds, OCR text changes, and representative frames.
+4. **Timing map.** The agent builds a simple source-time to output-time map so
    narration beats line up with visible screen actions.
-4. **Edit assets.** The agent extracts freeze frames, creates transparent
+5. **Edit assets.** The agent extracts freeze frames, creates transparent
    overlay patches for artifacts such as hover tooltips, and prepares any
    project-specific intro/outro stills you requested.
-5. **Preview render.** The agent renders a low-quality preview first and shares
+6. **Preview render.** The agent renders a low-quality preview first and shares
    the file path so you can review timing, text, fades, and patched areas.
-6. **HQ render.** After you approve the preview, the agent renders the
+7. **HQ render.** After you approve the preview, the agent renders the
    high-quality MP4 and verifies it with media probing and timestamp review
    frames.
 
@@ -57,6 +63,14 @@ Whisper/ffmpeg dependencies; Pillow helpers may install Pillow with the active
 Python for frame-review and patch helpers.
 
 ### Required
+
+- **macOS** - required for Apple Vision screen analysis.
+- **macOS Command Line Tools** - provides the `swift` runtime used by the
+  bundled Apple Vision helper:
+
+  ```bash
+  xcode-select --install
+  ```
 
 - **Python 3.10 or newer** - the bundled scripts use modern type-hint syntax.
   Install it with Homebrew or from python.org if `python3` is not already
@@ -97,6 +111,10 @@ These ship inside the skill directory and don't require a separate install:
   `ffprobe`.
 - `scripts/transcribe_narration.py` - transcribes narration audio with local
   whisper.cpp and writes `transcript.json` plus raw Whisper outputs.
+- `scripts/analyze_screen_events.py` - coordinates macOS Apple Vision screen
+  analysis and writes `screen-events.json` plus review artifacts.
+- `scripts/vision_frame_analysis.swift` - extracts OCR and feature-print
+  similarity from sampled screencast frames using Apple Vision.
 - `scripts/extract_review_frames.py` - extracts timestamped frames and optional
   contact sheets for visual review; installs Pillow automatically when needed.
 - `scripts/make_overlay_patch.py` - creates transparent PNG overlays from clean

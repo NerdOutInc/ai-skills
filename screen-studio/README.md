@@ -6,6 +6,9 @@ clean Helium browser setup for web demos, scripted dry runs, coordinate
 calibration with `cliclick`, Screen Studio shortcut usage, smoke captures, and
 keeper-take verification with `ffprobe` and timestamp contact sheets.
 
+This skill is macOS-only because it drives Screen Studio and macOS UI
+automation.
+
 The full agent instructions live in [`SKILL.md`](SKILL.md).
 
 ## Install
