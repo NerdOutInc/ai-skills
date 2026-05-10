@@ -153,17 +153,15 @@ def ensure_timeline_defaults(spec: dict[str, Any], source_video: Path | None) ->
     timeline = spec.setdefault("timeline", {})
     width = timeline.get("width")
     height = timeline.get("height")
+    if (width is None) != (height is None):
+        raise SystemExit("timeline.width and timeline.height must be provided together")
     if not source_video:
         return
 
-    if width is None or height is None:
+    if width is None and height is None:
         detected_size = detect_video_size(source_video)
         if detected_size:
-            detected_width, detected_height = detected_size
-            if width is None:
-                timeline["width"] = detected_width
-            if height is None:
-                timeline["height"] = detected_height
+            timeline["width"], timeline["height"] = detected_size
 
     if "fps" not in timeline or timeline.get("fps") is None:
         detected_fps = detect_video_fps(source_video)
