@@ -26,6 +26,8 @@ def parse_timestamp(value: str) -> float:
     minutes = int(parts[-2])
     hours = int(parts[-3]) if len(parts) == 3 else 0
     result = hours * 3600 + minutes * 60 + seconds
+    if not math.isfinite(result):
+        raise ValueError(f"timestamp must be finite: {value}")
     if result < 0:
         raise ValueError(f"timestamp must be non-negative: {value}")
     return result
