@@ -21,6 +21,7 @@ from typing import Any
 
 
 SCHEMA = "nerdout.screen_events.v1"
+END_FRAME_MARGIN_SECONDS = 0.25
 
 
 @dataclass
@@ -443,7 +444,9 @@ def time_range(start: float, end: float, step: float) -> list[float]:
 
 
 def add_time(times: dict[float, str], time: float, role: str, duration: float) -> None:
-    max_time = max(0.0, duration - 0.25)
+    # Avoid the exact container end, where ffmpeg can seek past the last
+    # decodable frame.
+    max_time = max(0.0, duration - END_FRAME_MARGIN_SECONDS)
     clamped = round(min(max(0.0, time), max_time), 3)
     existing = times.get(clamped)
     if existing and existing != "anchor":
@@ -585,6 +588,7 @@ def build_events(
     holds: list[HoldSpan],
     records: list[dict[str, Any]],
     args: argparse.Namespace,
+    stable_threshold_hint: float,
 ) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for scene in scenes:
@@ -605,7 +609,10 @@ def build_events(
 
     for hold in holds:
         record = nearest_record(records, hold.mid)
-        score = max(0.0, min(1.0, 1.0 - hold.mean_score / max(args.stable_threshold_hint, 0.001)))
+        score = max(
+            0.0,
+            min(1.0, 1.0 - hold.mean_score / max(stable_threshold_hint, 0.001)),
+        )
         events.append(
             event_from_record(
                 "stable_hold",
@@ -710,7 +717,6 @@ def main() -> int:
     parser.add_argument("--ocr-change-threshold", type=positive_float, default=0.70)
     parser.add_argument("--no-install", action="store_true", help="Do not install Pillow automatically")
     args = parser.parse_args()
-    args.stable_threshold_hint = 0.015
 
     ensure_macos()
     video = args.video.expanduser()
@@ -746,7 +752,6 @@ def main() -> int:
     diffs = consecutive_diffs(scan_frames, Image, ImageChops, ImageStat)
     scene_candidates, scene_threshold = detect_scene_candidates(diffs, args.min_event_gap)
     holds, stable_threshold = detect_stable_holds(diffs, args.min_hold_duration)
-    args.stable_threshold_hint = stable_threshold
 
     refined_scenes = [
         refine_scene_candidate(
@@ -781,7 +786,7 @@ def main() -> int:
     for record in records:
         record["role"] = by_id.get(str(record.get("id")), "anchor")
 
-    events = build_events(refined_scenes, holds, records, args)
+    events = build_events(refined_scenes, holds, records, args, stable_threshold)
     contact_sheet = out_dir / "screen-events-contact-sheet.jpg"
     make_contact_sheet(events, contact_sheet, args.sheet_width, args.cols, Image, ImageDraw, ImageFont)
 

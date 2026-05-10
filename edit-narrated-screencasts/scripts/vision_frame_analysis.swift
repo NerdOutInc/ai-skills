@@ -208,7 +208,7 @@ let options = parseArgs()
 
 do {
     let entries = try readManifest(options.manifest)
-    var output = ""
+    var outputRecords: [String] = []
     var previousFeaturePrint: VNFeaturePrintObservation?
     var usableFrames = 0
 
@@ -222,8 +222,7 @@ do {
         if result.payload["error"] == nil {
             usableFrames += 1
         }
-        output += jsonObject(result.payload)
-        output += "\n"
+        outputRecords.append(jsonObject(result.payload))
     }
 
     if usableFrames == 0 {
@@ -236,6 +235,7 @@ do {
         at: outURL.deletingLastPathComponent(),
         withIntermediateDirectories: true
     )
+    let output = outputRecords.joined(separator: "\n") + "\n"
     try output.write(to: outURL, atomically: true, encoding: .utf8)
 } catch {
     fputs("\(error.localizedDescription)\n", stderr)
