@@ -167,6 +167,12 @@ def ensure_model(model: Path, no_install: bool) -> Path:
     model = model.expanduser()
     if model.exists():
         return model
+    if model != DEFAULT_MODEL.expanduser():
+        raise SystemExit(
+            f"Model not found: {model}\n"
+            f"Only the default model path is downloaded automatically: {DEFAULT_MODEL}\n"
+            "Provide an existing model path with --model, or omit --model to use the default."
+        )
     if no_install:
         raise SystemExit(
             f"Missing Whisper model: {model}\n"
