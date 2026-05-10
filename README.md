@@ -27,18 +27,24 @@ npx skills add https://github.com/NerdOutInc/ai-skills --list
 
 ## Available Skills
 
+The current skills in this repository are macOS-only. `screen-studio` depends
+on Screen Studio and macOS UI automation, while `edit-narrated-screencasts`
+uses Apple Vision for screencast screen analysis.
+
 ### [edit-narrated-screencasts](edit-narrated-screencasts/README.md)
 
 The `edit-narrated-screencasts` skill helps agents turn an existing screen
 recording and separately recorded narration into a polished screencast. It
-covers media inspection, narration/action timing maps, clip retiming, freeze
-frames, optional project-specific intro/outro stills, transparent artifact
-patches, preview renders, HQ renders, and timestamp contact-sheet verification.
+covers media inspection, local narration transcription, Apple Vision screen
+analysis, narration/action timing maps, clip retiming, freeze frames, optional
+project-specific intro/outro stills, transparent artifact patches, preview
+renders, HQ renders, and timestamp contact-sheet verification.
 
 ### [screen-studio](screen-studio/README.md)
 
-The `screen-studio` skill helps agents record polished, repeatable macOS screencasts
-with [Screen Studio](https://screen.studio). It guides capture-scope selection, clean
-Helium browser setup for web demos, scripted dry runs, coordinate calibration
-with `cliclick`, Screen Studio shortcut usage, smoke captures, and keeper-take
-verification with tools such as `ffprobe` and timestamp contact sheets.
+The `screen-studio` skill helps agents record polished, repeatable macOS
+screencasts with [Screen Studio](https://screen.studio). It guides capture-scope
+selection, clean Helium browser setup for web demos, scripted dry runs,
+coordinate calibration with `cliclick`, Screen Studio shortcut usage, smoke
+captures, and keeper-take verification with tools such as `ffprobe` and
+timestamp contact sheets.
