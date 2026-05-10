@@ -31,9 +31,19 @@ Follow each phase in order.
      resolution and frame rate when the source file is available; set
      `timeline.fps` explicitly for placeholder-only dry runs.
 
+2. Transcribe the narration with `scripts/transcribe_narration.py` before
+   building the timing map.
+   - Run `python3 "$SKILL_DIR/scripts/transcribe_narration.py" narration.m4a --out /tmp/my-edit/transcript`.
+   - Use `/tmp/my-edit/transcript/transcript.json` for narration cues and
+     timestamps; raw Whisper `.txt`, `.srt`, and `.json` files are written in
+     the same output directory.
+   - The helper may automatically install Homebrew `ffmpeg` and `whisper-cpp`
+     and download the default local Whisper model. Pass `--no-install` only
+     when the environment is locked down.
+
 ### Phase 2 — Edit
 
-2. Build a timing map.
+3. Build a timing map.
    - Mark narration beats and the matching screen actions.
    - If narration and screen actions do not align, notify the user and suggest
      adjustments to either the narration or the video.
@@ -42,7 +52,7 @@ Follow each phase in order.
    - Keep a simple table of source time, output time, action, narration cue,
      and edit operation.
 
-3. Create supporting stills.
+4. Create supporting stills.
    - If the user asks for intro/outro stills, treat them as project-specific
      still assets. Use supplied artwork, inspect the user's actual brand/source
      files, or create one-off images in the requested output directory. Do not
@@ -54,19 +64,19 @@ Follow each phase in order.
 
 ### Phase 3 — Render
 
-4. Render a preview first.
+5. Render a preview first.
    - Use `scripts/render_screencast.py --profile preview`.
    - Share the preview path and ask the user to review timing, text, fades, and
      patched areas.
    - Expect several rounds of small timing/design adjustments.
 
-5. Render HQ after approval.
+6. Render HQ after approval.
    - Use `scripts/render_screencast.py --profile hq`.
    - Prefer H.264, `-preset slow`, `-crf 18`, original FPS, `yuv420p`, and audio
      stream copy when the audio is already AAC (m4a/MP4-compatible).
    - Use `-movflags +faststart` for shareable MP4 output.
 
-6. Verify the final.
+7. Verify the final.
    - Probe the final file.
    - Generate a contact sheet around intros, fades, patches, important actions,
      and the outro.
@@ -88,17 +98,23 @@ Follow each phase in order.
   intro.fade_duration`. The narration plays from output time `0`, so if the
   intro card is 4s with a 1s fade, the m4a should start with ~3s of silence.
   See `references/edit-spec.md` for details.
-- Ask before installing dependencies. The scripts need `ffmpeg`/`ffprobe` and
-  Pillow; if either is missing, ask the user before installing rather than
-  running `brew install` or `pip install` unprompted.
+- Do not run unrelated dependency installs without user approval. Bundled
+  helpers may automatically install their own direct runtime dependencies:
+  `transcribe_narration.py` may install Homebrew `ffmpeg` and `whisper-cpp`
+  and download the default Whisper model; Pillow-using helpers may install
+  Pillow with `python3 -m pip install --user pillow`. Pass `--no-install` only
+  in locked-down environments.
 
 ## Bundled Helpers
 
 - `scripts/probe_media.py`: summarize source video/audio metadata.
+- `scripts/transcribe_narration.py`: transcribe narration with local
+  whisper.cpp and write normalized `transcript.json`.
 - `scripts/extract_review_frames.py`: extract timestamped frames and contact
-  sheets for review.
+  sheets for review. Automatically installs Pillow when a contact sheet is
+  requested and Pillow is missing.
 - `scripts/make_overlay_patch.py`: create transparent PNG overlays from clean
-  and dirty frames.
+  and dirty frames. Automatically installs Pillow when missing.
 - `scripts/render_screencast.py`: render preview/HQ MP4 files from an edit spec.
 
 Read the references when needed:

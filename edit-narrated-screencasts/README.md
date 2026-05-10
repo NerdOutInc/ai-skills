@@ -33,14 +33,16 @@ A typical session:
 
 1. **Media inspection.** The agent probes the source video and narration audio
    for duration, resolution, frame rate, codecs, bitrate, and embedded audio.
-2. **Timing map.** The agent builds a simple source-time to output-time map so
+2. **Narration transcription.** The agent transcribes the narration locally and
+   uses `transcript.json` to anchor the timing map.
+3. **Timing map.** The agent builds a simple source-time to output-time map so
    narration beats line up with visible screen actions.
-3. **Edit assets.** The agent extracts freeze frames, creates transparent
+4. **Edit assets.** The agent extracts freeze frames, creates transparent
    overlay patches for artifacts such as hover tooltips, and prepares any
    project-specific intro/outro stills you requested.
-4. **Preview render.** The agent renders a low-quality preview first and shares
+5. **Preview render.** The agent renders a low-quality preview first and shares
    the file path so you can review timing, text, fades, and patched areas.
-5. **HQ render.** After you approve the preview, the agent renders the
+6. **HQ render.** After you approve the preview, the agent renders the
    high-quality MP4 and verifies it with media probing and timestamp review
    frames.
 
@@ -49,9 +51,10 @@ audio timing constraints, and helper script usage, see [`SKILL.md`](SKILL.md).
 
 ## Dependencies
 
-The agent checks for these at the point in the workflow where they're needed
-and will ask before running `brew install` or `pip install`. They're listed
-here so you can pre-install them once and skip the prompt on every session.
+The agent checks for these at the point in the workflow where they're needed.
+Bundled helpers can automatically install their own direct runtime
+dependencies: Whisper/ffmpeg via Homebrew for transcription, and Pillow via
+the active Python for frame-review and patch helpers.
 
 ### Required
 
@@ -60,17 +63,28 @@ here so you can pre-install them once and skip the prompt on every session.
   available on your system.
 
 - **[ffmpeg](https://www.ffmpeg.org)** (provides `ffprobe`) - media inspection,
-  frame extraction, contact sheets, timeline rendering, and MP4 output:
+  transcription audio conversion, frame extraction, contact sheets, timeline
+  rendering, and MP4 output. The transcription helper installs this
+  automatically on macOS/Homebrew when needed:
 
   ```bash
   brew install ffmpeg
   ```
 
 - **[Pillow](https://python-pillow.org)** - contact sheet generation and
-  transparent overlay patch creation:
+  transparent overlay patch creation. The bundled Pillow-using scripts install
+  this automatically with the active Python when needed:
 
   ```bash
-  python3 -m pip install pillow
+  python3 -m pip install --user pillow
+  ```
+
+- **[whisper-cpp](https://github.com/ggml-org/whisper.cpp)** - local narration
+  transcription. `scripts/transcribe_narration.py` installs the Homebrew
+  package and downloads `ggml-base.en.bin` automatically when needed:
+
+  ```bash
+  brew install whisper-cpp
   ```
 
 ### Bundled (no install needed)
@@ -79,9 +93,11 @@ These ship inside the skill directory and don't require a separate install:
 
 - `scripts/probe_media.py` - summarizes source video/audio metadata with
   `ffprobe`.
+- `scripts/transcribe_narration.py` - transcribes narration audio with local
+  whisper.cpp and writes `transcript.json` plus raw Whisper outputs.
 - `scripts/extract_review_frames.py` - extracts timestamped frames and optional
-  contact sheets for visual review.
+  contact sheets for visual review; installs Pillow automatically when needed.
 - `scripts/make_overlay_patch.py` - creates transparent PNG overlays from clean
-  and dirty frames.
+  and dirty frames; installs Pillow automatically when needed.
 - `scripts/render_screencast.py` - renders preview and HQ MP4 files from a JSON
   edit spec.

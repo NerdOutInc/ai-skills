@@ -6,9 +6,11 @@ requiring a new recording.
 
 ## 0. Check Dependencies
 
-The scripts depend on `ffmpeg` (with `ffprobe`) and Python's Pillow library.
-If either is missing on the user's machine, ask before installing rather than
-running `brew install` or `pip install` unprompted.
+The rendering and frame-review scripts depend on `ffmpeg` (with `ffprobe`) and
+Python's Pillow library. The transcription helper can automatically install
+Homebrew `ffmpeg`, Homebrew `whisper-cpp`, and the default Whisper model when
+needed. Pillow-using helpers can automatically install Pillow with the active
+Python when needed. Use `--no-install` only in locked-down environments.
 
 ```bash
 command -v ffmpeg
@@ -27,6 +29,20 @@ Run:
 python3 "$SKILL_DIR/scripts/probe_media.py" source.mp4 narration.m4a
 ```
 
+Then transcribe the narration:
+
+```bash
+python3 "$SKILL_DIR/scripts/transcribe_narration.py" \
+  narration.m4a \
+  --out /tmp/my-edit/transcript
+```
+
+Use `--no-install` only in locked-down environments. By default, the helper may
+install Homebrew `ffmpeg` and `whisper-cpp` and download
+`$HOME/.cache/whisper.cpp/ggml-base.en.bin`. It writes
+`/tmp/my-edit/transcript/transcript.json` plus raw `whisper.txt`,
+`whisper.srt`, and `whisper.json` files.
+
 Record:
 
 - Source video duration, resolution, frame rate, codec, and bitrate.
@@ -38,6 +54,7 @@ Record:
   does not map embedded source-video audio; provide narration or replacement
   audio with `inputs.audio` when the output should include audio.
 - The target output resolution and frame rate.
+- Transcript cues and timestamps from `transcript.json`.
 
 Keep the original source files untouched.
 
