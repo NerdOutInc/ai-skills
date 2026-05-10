@@ -6,8 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
+import platform
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from fractions import Fraction
@@ -56,6 +59,7 @@ STOP_WORDS = {
     "you",
     "your",
 }
+HOMEBREW_BIN_DIRS = (Path("/opt/homebrew/bin"), Path("/usr/local/bin"))
 
 
 def eprint(message: str) -> None:
@@ -82,6 +86,75 @@ def run(cmd: list[str | Path], *, capture_output: bool = False) -> subprocess.Co
         elif exc.stdout:
             detail = exc.stdout.strip()
         raise SystemExit(detail or f"Command failed: {format_cmd(cmd)}") from exc
+
+
+def homebrew_executables(name: str) -> list[Path]:
+    return [directory / name for directory in HOMEBREW_BIN_DIRS]
+
+
+def include_homebrew_bin_dirs() -> None:
+    path_parts = [part for part in os.environ.get("PATH", "").split(os.pathsep) if part]
+    for directory in reversed(HOMEBREW_BIN_DIRS):
+        directory_text = str(directory)
+        if directory.exists() and directory_text not in path_parts:
+            path_parts.insert(0, directory_text)
+    os.environ["PATH"] = os.pathsep.join(path_parts)
+
+
+def find_executable(name: str, extras: list[Path] | None = None) -> str | None:
+    found = shutil.which(name)
+    if found:
+        return found
+    for candidate in extras or []:
+        expanded = candidate.expanduser()
+        if expanded.exists() and expanded.is_file():
+            return str(expanded)
+    return None
+
+
+def find_brew() -> str | None:
+    return find_executable("brew", homebrew_executables("brew"))
+
+
+def can_auto_install() -> bool:
+    return platform.system() == "Darwin" and find_brew() is not None
+
+
+def missing_dependency(name: str, install_cmd: str, no_install: bool) -> SystemExit:
+    if no_install:
+        return SystemExit(
+            f"Missing {name}. Install it with:\n  {install_cmd}\n"
+            "Then rerun this command, or rerun without --no-install on macOS with Homebrew."
+        )
+    return SystemExit(
+        f"Missing {name}. Automatic install is only supported on macOS with Homebrew.\n"
+        f"Install it with:\n  {install_cmd}"
+    )
+
+
+def ensure_ffmpeg(no_install: bool) -> tuple[str, str]:
+    include_homebrew_bin_dirs()
+    ffmpeg = find_executable("ffmpeg", homebrew_executables("ffmpeg"))
+    ffprobe = find_executable("ffprobe", homebrew_executables("ffprobe"))
+    if ffmpeg and ffprobe:
+        return ffmpeg, ffprobe
+
+    if no_install or not can_auto_install():
+        raise missing_dependency("ffmpeg/ffprobe", "brew install ffmpeg", no_install)
+
+    brew = find_brew()
+    if not brew:
+        raise missing_dependency("ffmpeg/ffprobe", "brew install ffmpeg", no_install)
+    run([brew, "install", "ffmpeg"])
+
+    ffmpeg = find_executable("ffmpeg", homebrew_executables("ffmpeg"))
+    ffprobe = find_executable("ffprobe", homebrew_executables("ffprobe"))
+    if ffmpeg and ffprobe:
+        return ffmpeg, ffprobe
+    raise SystemExit(
+        "ffmpeg install completed, but ffmpeg/ffprobe still were not found on PATH "
+        "or in common Homebrew bin directories."
+    )
 
 
 def positive_float(value: str) -> float:
@@ -829,6 +902,7 @@ def main() -> int:
     timing_json_path = out_dir / "timing-map.json"
     contact_sheet = out_dir / "screen-events-contact-sheet.jpg"
 
+    ensure_ffmpeg(args.no_install)
     media_summary = write_media_summary(script_dir / "probe_media.py", video, audio, media_summary_path)
     transcript = transcribe(args, script_dir / "transcribe_narration.py", audio, out_dir)
     screen_events = analyze_screen(args, script_dir / "analyze_screen_events.py", video, out_dir)
