@@ -111,8 +111,10 @@ def main() -> int:
         raise SystemExit(f"Dirty frame not found: {dirty_path}")
 
     mask_path: Path | None = None
-    clean = Image.open(clean_path).convert("RGBA")
-    dirty = Image.open(dirty_path).convert("RGBA")
+    with Image.open(clean_path) as clean_source:
+        clean = clean_source.convert("RGBA")
+    with Image.open(dirty_path) as dirty_source:
+        dirty = dirty_source.convert("RGBA")
     if clean.size != dirty.size:
         raise SystemExit(f"Frame sizes differ: clean={clean.size}, dirty={dirty.size}")
 
@@ -120,7 +122,8 @@ def main() -> int:
         mask_path = args.mask.expanduser()
         if not mask_path.exists():
             raise SystemExit(f"Mask not found: {mask_path}")
-        mask = Image.open(mask_path).convert("L").resize(clean.size)
+        with Image.open(mask_path) as mask_source:
+            mask = mask_source.convert("L").resize(clean.size)
     elif args.diff_alpha:
         mask = make_diff_mask(ImageChops, ImageFilter, clean, dirty, args.threshold, args.expand)
         if args.bbox:

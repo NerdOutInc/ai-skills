@@ -18,6 +18,9 @@ python3 -c "import PIL" 2>/dev/null && echo "Pillow OK" || echo "Pillow missing"
 
 ## 1. Inspect the Media
 
+In the examples below, `$SKILL_DIR` means the path to the installed
+`edit-narrated-screencasts` skill directory.
+
 Run:
 
 ```bash

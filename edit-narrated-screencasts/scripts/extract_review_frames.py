@@ -150,7 +150,8 @@ def make_contact_sheet(frames: list[Path], timestamps: list[float], output: Path
 
     images = []
     for frame, ts in existing_pairs:
-        image = Image.open(frame).convert("RGB")
+        with Image.open(frame) as source:
+            image = source.convert("RGB")
         ratio = width / image.width
         images.append((image.resize((width, int(image.height * ratio))), ts))
 
