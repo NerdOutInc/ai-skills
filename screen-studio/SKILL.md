@@ -427,12 +427,12 @@ python3 "$SKILL_DIR/scripts/transcribe_narration.py" \
   --out /tmp/screen-studio-transcript
 ```
 
-The helper uses local whisper.cpp. If needed, it automatically installs
-Homebrew `ffmpeg` and `whisper-cpp`, downloads
+The helper uses local whisper.cpp. On macOS with Homebrew, it can automatically
+install `ffmpeg` and `whisper-cpp` when missing. It downloads
 `$HOME/.cache/whisper.cpp/ggml-base.en.bin`, converts the audio to 16 kHz mono
 WAV, and writes `/tmp/screen-studio-transcript/transcript.json` plus raw
 `whisper.txt`, `whisper.srt`, and `whisper.json` files. Pass `--no-install`
-only when the environment is locked down.
+in locked-down environments or when dependencies must be preinstalled manually.
 
 Create or update the actions file with:
 
@@ -492,8 +492,8 @@ Keeper takes should move the actual macOS pointer at a human pace.
   CLICLICK="$(python3 "$SKILL_DIR/scripts/ensure_cliclick.py")"
   ```
 
-  The helper automatically installs Homebrew `cliclick` on macOS when missing.
-  Pass `--no-install` only in locked-down environments.
+  On macOS with Homebrew, the helper can automatically install `cliclick` when
+  missing. Pass `--no-install` in locked-down environments.
 - `cliclick` uses global macOS display coordinates.
 - Do not pass Computer Use or screenshot coordinates directly to `cliclick`.
 - Prefer live pointer coordinates when possible. Put the pointer over the

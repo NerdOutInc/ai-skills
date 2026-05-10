@@ -76,7 +76,10 @@ def install_cliclick(no_install: bool) -> str:
     )
     if cliclick:
         return cliclick
-    raise SystemExit("cliclick install completed, but cliclick still was not found on PATH.")
+    raise SystemExit(
+        "cliclick install completed, but cliclick still was not found on PATH "
+        "or in common Homebrew bin directories."
+    )
 
 
 def main() -> int:

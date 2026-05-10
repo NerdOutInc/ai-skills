@@ -37,9 +37,10 @@ Follow each phase in order.
    - Use `/tmp/my-edit/transcript/transcript.json` for narration cues and
      timestamps; raw Whisper `.txt`, `.srt`, and `.json` files are written in
      the same output directory.
-   - The helper may automatically install Homebrew `ffmpeg` and `whisper-cpp`
-     and download the default local Whisper model. Pass `--no-install` only
-     when the environment is locked down.
+   - On macOS with Homebrew, the helper may automatically install `ffmpeg` and
+     `whisper-cpp` and download the default local Whisper model. Pass
+     `--no-install` in locked-down environments or when dependencies must be
+     preinstalled manually.
 
 ### Phase 2 — Edit
 
@@ -100,10 +101,10 @@ Follow each phase in order.
   See `references/edit-spec.md` for details.
 - Do not run unrelated dependency installs without user approval. Bundled
   helpers may automatically install their own direct runtime dependencies:
-  `transcribe_narration.py` may install Homebrew `ffmpeg` and `whisper-cpp`
-  and download the default Whisper model; Pillow-using helpers may install
-  Pillow with the active Python, using `--user` only for non-virtualenv Python
-  installs. Pass `--no-install` only in locked-down environments.
+  on macOS with Homebrew, `transcribe_narration.py` may install `ffmpeg` and
+  `whisper-cpp` and download the default Whisper model; Pillow-using helpers may
+  install Pillow with the active Python, using `--user` only for non-virtualenv
+  Python installs. Pass `--no-install` in locked-down environments.
 
 ## Bundled Helpers
 

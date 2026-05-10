@@ -8,9 +8,9 @@ requiring a new recording.
 
 The rendering and frame-review scripts depend on `ffmpeg` (with `ffprobe`) and
 Python's Pillow library. The transcription helper can automatically install
-Homebrew `ffmpeg`, Homebrew `whisper-cpp`, and the default Whisper model when
-needed. Pillow-using helpers can automatically install Pillow with the active
-Python when needed. Use `--no-install` only in locked-down environments.
+`ffmpeg`, `whisper-cpp`, and the default Whisper model when needed on macOS with
+Homebrew. Pillow-using helpers can automatically install Pillow with the active
+Python when needed. Use `--no-install` in locked-down environments.
 
 ```bash
 command -v ffmpeg
@@ -37,8 +37,8 @@ python3 "$SKILL_DIR/scripts/transcribe_narration.py" \
   --out /tmp/my-edit/transcript
 ```
 
-Use `--no-install` only in locked-down environments. By default, the helper may
-install Homebrew `ffmpeg` and `whisper-cpp` and download
+Use `--no-install` in locked-down environments. On macOS with Homebrew, the
+helper may install `ffmpeg` and `whisper-cpp` and download
 `$HOME/.cache/whisper.cpp/ggml-base.en.bin`. It writes
 `/tmp/my-edit/transcript/transcript.json` plus raw `whisper.txt`,
 `whisper.srt`, and `whisper.json` files.

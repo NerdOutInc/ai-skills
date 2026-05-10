@@ -52,9 +52,9 @@ audio timing constraints, and helper script usage, see [`SKILL.md`](SKILL.md).
 ## Dependencies
 
 The agent checks for these at the point in the workflow where they're needed.
-Bundled helpers can automatically install their own direct runtime
-dependencies: Whisper/ffmpeg via Homebrew for transcription, and Pillow via
-the active Python for frame-review and patch helpers.
+On macOS with Homebrew, the transcription helper can automatically install
+Whisper/ffmpeg dependencies; Pillow helpers may install Pillow with the active
+Python for frame-review and patch helpers.
 
 ### Required
 
@@ -81,8 +81,9 @@ the active Python for frame-review and patch helpers.
   ```
 
 - **[whisper-cpp](https://github.com/ggml-org/whisper.cpp)** - local narration
-  transcription. `scripts/transcribe_narration.py` installs the Homebrew
-  package and downloads `ggml-base.en.bin` automatically when needed:
+  transcription. On macOS with Homebrew, `scripts/transcribe_narration.py`
+  installs the package and downloads `ggml-base.en.bin` automatically when
+  needed:
 
   ```bash
   brew install whisper-cpp

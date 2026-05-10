@@ -113,7 +113,10 @@ def ensure_ffmpeg(no_install: bool) -> tuple[str, str]:
     ffprobe = find_executable("ffprobe", homebrew_executables("ffprobe"))
     if ffmpeg and ffprobe:
         return ffmpeg, ffprobe
-    raise SystemExit("ffmpeg install completed, but ffmpeg/ffprobe still were not found on PATH.")
+    raise SystemExit(
+        "ffmpeg install completed, but ffmpeg/ffprobe still were not found on PATH "
+        "or in common Homebrew bin directories."
+    )
 
 
 def ensure_whisper_cli(no_install: bool, override: str | None) -> str:
@@ -151,7 +154,10 @@ def ensure_whisper_cli(no_install: bool, override: str | None) -> str:
     )
     if whisper_cli:
         return whisper_cli
-    raise SystemExit("whisper-cpp install completed, but whisper-cli still was not found on PATH.")
+    raise SystemExit(
+        "whisper-cpp install completed, but whisper-cli still was not found on PATH "
+        "or in common Homebrew bin directories."
+    )
 
 
 def sha256_file(path: Path) -> str:

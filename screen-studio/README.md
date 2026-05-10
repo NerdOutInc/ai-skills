@@ -81,9 +81,9 @@ See the [Recording Status Server](SKILL.md#recording-status-server) section of
 ## Dependencies
 
 The agent checks for these at the point in the workflow where they're needed.
-Bundled helpers can automatically install their own direct Homebrew
-dependencies: ffmpeg/whisper-cpp for transcription, and cliclick for visible
-cursor movement.
+On macOS with Homebrew, bundled helpers can automatically install their own
+direct dependencies: ffmpeg/whisper-cpp for transcription, and cliclick for
+visible cursor movement.
 
 ### Required
 
@@ -139,8 +139,8 @@ These ship inside the skill directory and don't require a separate install:
   recording status server. No Python, Node, Go, or Homebrew runtime needed.
 - `scripts/scroll-wheel.swift` — Swift helper for trackpad-style smooth
   scrolling during recordings. Runs via the system `swift` interpreter.
-- `scripts/ensure_cliclick.py` — installs Homebrew `cliclick` when missing and
-  prints the executable path for visible cursor movement.
+- `scripts/ensure_cliclick.py` — on macOS with Homebrew, installs `cliclick`
+  when missing and prints the executable path for visible cursor movement.
 - `scripts/transcribe_narration.py` — local whisper.cpp transcription helper
   that writes normalized `transcript.json` plus raw Whisper outputs.
 - `scripts/vision-find-text.swift` — Apple Vision text-recognition helper
