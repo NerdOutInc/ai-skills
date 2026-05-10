@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import shlex
 import shutil
@@ -119,6 +120,10 @@ def ensure_whisper_cli(no_install: bool, override: str | None) -> str:
     if override:
         override_path = Path(override).expanduser()
         if override_path.exists():
+            if not override_path.is_file():
+                raise SystemExit(f"Configured whisper-cli is not a file: {override_path}")
+            if not os.access(override_path, os.X_OK):
+                raise SystemExit(f"Configured whisper-cli is not executable: {override_path}")
             return str(override_path)
         found = shutil.which(override)
         if found:
@@ -166,6 +171,8 @@ def download_model(tmp: Path) -> None:
 def ensure_model(model: Path, no_install: bool) -> Path:
     model = model.expanduser()
     if model.exists():
+        if not model.is_file():
+            raise SystemExit(f"Whisper model path is not a file: {model}")
         return model
     if model != DEFAULT_MODEL.expanduser():
         raise SystemExit(
