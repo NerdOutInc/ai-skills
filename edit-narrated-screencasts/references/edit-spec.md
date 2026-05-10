@@ -1,8 +1,8 @@
 # Edit Spec
 
 `scripts/render_screencast.py` reads a JSON edit spec and turns it into an
-`ffmpeg` command. Paths can be absolute, relative to the spec file, or use
-environment variables (`$VAR` and `${VAR}` are both expanded).
+`ffmpeg` command. Paths can be absolute or relative to the spec file (a
+leading `~` is also expanded).
 
 ## Minimal Shape
 
@@ -194,5 +194,5 @@ Run a dry run to inspect the generated command:
 python3 "$SKILL_DIR/scripts/render_screencast.py" edit-spec.json --profile hq --dry-run
 ```
 
-Dry runs skip file existence checks, so paths with unset environment variables
-or placeholders still print a useful command for inspection.
+Dry runs skip file existence checks, so specs with placeholder paths still
+print a useful command for inspection.
