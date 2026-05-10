@@ -238,9 +238,7 @@ def scale_filter(width: int | None) -> str | None:
 
 
 def extract_scan_frames(ffmpeg: str, video: Path, output_dir: Path, interval: float, width: int) -> list[Frame]:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    for old in output_dir.glob("scan_*.jpg"):
-        old.unlink()
+    clean_generated_dir(output_dir)
     fps = 1.0 / interval
     cmd = [
         ffmpeg,
@@ -263,6 +261,27 @@ def extract_scan_frames(ffmpeg: str, video: Path, output_dir: Path, interval: fl
     if len(frames) < 2:
         raise SystemExit("ffmpeg produced fewer than two scan frames; cannot analyze screen events.")
     return frames
+
+
+def clean_generated_dir(output_dir: Path) -> None:
+    if output_dir.exists() and not output_dir.is_dir():
+        raise SystemExit(f"Generated artifact path is not a directory: {output_dir}")
+    if output_dir.exists():
+        for child in output_dir.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+
+def remove_generated_files(paths: list[Path]) -> None:
+    for path in paths:
+        if not path.exists():
+            continue
+        if path.is_dir():
+            raise SystemExit(f"Generated artifact path is a directory, not a file: {path}")
+        path.unlink()
 
 
 def extract_frame(ffmpeg: str, video: Path, output: Path, time: float, width: int | None) -> None:
@@ -447,6 +466,12 @@ def selected_vision_times(
         add_time(mandatory, hold.start, "hold_start", duration)
         add_time(mandatory, hold.mid, "stable_hold", duration)
         add_time(mandatory, hold.end, "hold_end", duration)
+    if len(mandatory) > args.max_vision_frames:
+        raise SystemExit(
+            f"Selected {len(mandatory)} required Apple Vision frames, which exceeds "
+            f"--max-vision-frames={args.max_vision_frames}. Increase --max-vision-frames, "
+            "increase --min-event-gap, or increase --min-hold-duration."
+        )
 
     anchors: dict[float, str] = {}
     for time in time_range(0.0, duration, args.vision_interval):
@@ -707,6 +732,16 @@ def main() -> int:
     scan_dir = out_dir / "scan-frames"
     refine_dir = out_dir / "refine-frames"
     frame_dir = out_dir / "frames"
+    remove_generated_files(
+        [
+            out_dir / "frames.jsonl",
+            out_dir / "vision-frames.jsonl",
+            out_dir / "screen-events.json",
+            out_dir / "screen-events-contact-sheet.jpg",
+        ]
+    )
+    clean_generated_dir(refine_dir)
+    clean_generated_dir(frame_dir)
     scan_frames = extract_scan_frames(ffmpeg, video, scan_dir, args.scan_interval, args.scan_width)
     diffs = consecutive_diffs(scan_frames, Image, ImageChops, ImageStat)
     scene_candidates, scene_threshold = detect_scene_candidates(diffs, args.min_event_gap)
