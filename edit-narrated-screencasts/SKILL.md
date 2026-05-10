@@ -102,8 +102,8 @@ Follow each phase in order.
   helpers may automatically install their own direct runtime dependencies:
   `transcribe_narration.py` may install Homebrew `ffmpeg` and `whisper-cpp`
   and download the default Whisper model; Pillow-using helpers may install
-  Pillow with `python3 -m pip install --user pillow`. Pass `--no-install` only
-  in locked-down environments.
+  Pillow with the active Python, using `--user` only for non-virtualenv Python
+  installs. Pass `--no-install` only in locked-down environments.
 
 ## Bundled Helpers
 

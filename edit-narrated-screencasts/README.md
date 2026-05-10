@@ -73,10 +73,11 @@ the active Python for frame-review and patch helpers.
 
 - **[Pillow](https://python-pillow.org)** - contact sheet generation and
   transparent overlay patch creation. The bundled Pillow-using scripts install
-  this automatically with the active Python when needed:
+  this automatically with the active Python when needed. Inside a virtualenv
+  they use the active environment; with system Python they add `--user`:
 
   ```bash
-  python3 -m pip install --user pillow
+  python3 -m pip install pillow
   ```
 
 - **[whisper-cpp](https://github.com/ggml-org/whisper.cpp)** - local narration
