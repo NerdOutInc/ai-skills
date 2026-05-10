@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import shlex
 import subprocess
@@ -88,7 +89,7 @@ def positive_float(value: str) -> float:
         parsed = float(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(f"{value!r} is not a number") from exc
-    if parsed <= 0:
+    if not math.isfinite(parsed) or parsed <= 0:
         raise argparse.ArgumentTypeError(f"{value!r} must be greater than 0")
     return parsed
 
@@ -350,7 +351,7 @@ def analyze_screen(args: argparse.Namespace, script: Path, video: Path, out_dir:
     ]
     for flag, value in passthrough:
         if value is not None:
-            cmd.extend([flag, value])
+            cmd.extend([flag, str(value)])
     if args.no_install:
         cmd.append("--no-install")
     run(cmd)
@@ -437,7 +438,7 @@ def candidate_event(event: dict[str, Any], anchor: float | None) -> dict[str, An
         "kind": event.get("kind"),
         "time": time,
         "start": maybe_float(event.get("start")),
-        "end": maybe_float(event.get("end")),
+        "end": event_end(event),
         "duration": maybe_float(event.get("duration")),
         "score": maybe_float(event.get("score")),
         "distance_from_expected": distance,
