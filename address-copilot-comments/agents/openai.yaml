@@ -1,7 +1,0 @@
-interface:
-  display_name: "Address Copilot Comments"
-  short_description: "Triage and address Copilot PR comments"
-  default_prompt: "Use $address-copilot-comments to triage Copilot PR review comments, plan fixes with me, and iterate until review is clean."
-
-policy:
-  allow_implicit_invocation: false
