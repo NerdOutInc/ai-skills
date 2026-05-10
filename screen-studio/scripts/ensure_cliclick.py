@@ -66,7 +66,7 @@ def install_cliclick(no_install: bool) -> str:
     cmd = [brew, "install", "cliclick"]
     eprint(f"+ {shlex.join(cmd)}")
     try:
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, stdout=sys.stderr)
     except subprocess.CalledProcessError as exc:
         raise SystemExit(f"Automatic cliclick install failed. Try:\n  {install_cmd}") from exc
 
