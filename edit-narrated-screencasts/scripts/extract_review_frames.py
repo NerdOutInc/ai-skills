@@ -14,21 +14,33 @@ import sys
 from pathlib import Path
 
 
+def pip_install_command() -> list[str]:
+    cmd = [sys.executable, "-m", "pip", "install"]
+    if sys.prefix == getattr(sys, "base_prefix", sys.prefix):
+        cmd.append("--user")
+    cmd.append("pillow")
+    return cmd
+
+
+def pillow_install_hint() -> str:
+    return shlex.join(pip_install_command())
+
+
 def install_pillow(no_install: bool) -> None:
     if no_install:
         raise SystemExit(
             "Pillow is required for contact sheets. Install it with:\n"
-            "  python3 -m pip install --user pillow\n"
+            f"  {pillow_install_hint()}\n"
             "Or use --no-sheet to skip contact sheet generation."
         )
-    cmd = [sys.executable, "-m", "pip", "install", "--user", "pillow"]
+    cmd = pip_install_command()
     print(shlex.join(cmd), file=sys.stderr, flush=True)
     try:
         subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as exc:
         raise SystemExit(
             "Automatic Pillow install failed. Install it with:\n"
-            "  python3 -m pip install --user pillow\n"
+            f"  {pillow_install_hint()}\n"
             "Or use --no-sheet to skip contact sheet generation."
         ) from exc
 
