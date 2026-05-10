@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import platform
 import shlex
@@ -20,7 +21,10 @@ from typing import Any
 # - screen-studio/scripts/transcribe_narration.py
 
 MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
+MODEL_SHA256 = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
+DOWNLOAD_TIMEOUT_SECONDS = 120
 DEFAULT_MODEL = Path.home() / ".cache" / "whisper.cpp" / "ggml-base.en.bin"
+HOMEBREW_BIN_DIRS = (Path("/opt/homebrew/bin"), Path("/usr/local/bin"))
 
 
 def eprint(message: str) -> None:
@@ -60,11 +64,15 @@ def find_executable(name: str, extras: list[Path] | None = None) -> str | None:
     return None
 
 
+def homebrew_executables(name: str) -> list[Path]:
+    return [directory / name for directory in HOMEBREW_BIN_DIRS]
+
+
 def find_brew() -> str | None:
     found = shutil.which("brew")
     if found:
         return found
-    for candidate in (Path("/opt/homebrew/bin/brew"), Path("/usr/local/bin/brew")):
+    for candidate in homebrew_executables("brew"):
         if candidate.exists():
             return str(candidate)
     return None
@@ -87,8 +95,8 @@ def missing_dependency(name: str, install_cmd: str, no_install: bool) -> SystemE
 
 
 def ensure_ffmpeg(no_install: bool) -> tuple[str, str]:
-    ffmpeg = find_executable("ffmpeg")
-    ffprobe = find_executable("ffprobe")
+    ffmpeg = find_executable("ffmpeg", homebrew_executables("ffmpeg"))
+    ffprobe = find_executable("ffprobe", homebrew_executables("ffprobe"))
     if ffmpeg and ffprobe:
         return ffmpeg, ffprobe
 
@@ -100,8 +108,8 @@ def ensure_ffmpeg(no_install: bool) -> tuple[str, str]:
         raise missing_dependency("ffmpeg/ffprobe", "brew install ffmpeg", no_install)
     run([brew, "install", "ffmpeg"])
 
-    ffmpeg = find_executable("ffmpeg")
-    ffprobe = find_executable("ffprobe")
+    ffmpeg = find_executable("ffmpeg", homebrew_executables("ffmpeg"))
+    ffprobe = find_executable("ffprobe", homebrew_executables("ffprobe"))
     if ffmpeg and ffprobe:
         return ffmpeg, ffprobe
     raise SystemExit("ffmpeg install completed, but ffmpeg/ffprobe still were not found on PATH.")
@@ -119,7 +127,7 @@ def ensure_whisper_cli(no_install: bool, override: str | None) -> str:
 
     whisper_cli = find_executable(
         "whisper-cli",
-        [Path("/opt/homebrew/bin/whisper-cli"), Path("/usr/local/bin/whisper-cli")],
+        homebrew_executables("whisper-cli"),
     )
     if whisper_cli:
         return whisper_cli
@@ -134,11 +142,25 @@ def ensure_whisper_cli(no_install: bool, override: str | None) -> str:
 
     whisper_cli = find_executable(
         "whisper-cli",
-        [Path("/opt/homebrew/bin/whisper-cli"), Path("/usr/local/bin/whisper-cli")],
+        homebrew_executables("whisper-cli"),
     )
     if whisper_cli:
         return whisper_cli
     raise SystemExit("whisper-cpp install completed, but whisper-cli still was not found on PATH.")
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def download_model(tmp: Path) -> None:
+    with urllib.request.urlopen(MODEL_URL, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+        with tmp.open("wb") as output:
+            shutil.copyfileobj(response, output)
 
 
 def ensure_model(model: Path, no_install: bool) -> Path:
@@ -159,7 +181,15 @@ def ensure_model(model: Path, no_install: bool) -> Path:
         tmp.unlink()
     eprint(f"Downloading Whisper model to {model}")
     try:
-        urllib.request.urlretrieve(MODEL_URL, tmp)
+        download_model(tmp)
+        actual_sha256 = sha256_file(tmp)
+        if actual_sha256 != MODEL_SHA256:
+            tmp.unlink(missing_ok=True)
+            raise SystemExit(
+                "Downloaded Whisper model checksum mismatch:\n"
+                f"  expected: {MODEL_SHA256}\n"
+                f"  actual:   {actual_sha256}"
+            )
         tmp.replace(model)
     except Exception as exc:
         if tmp.exists():

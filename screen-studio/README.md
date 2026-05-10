@@ -89,6 +89,9 @@ cursor movement.
 
 - **[Screen Studio](https://www.screen.studio/)** — the recording app this
   skill drives. Install from the developer's site.
+- **Python 3.10 or newer** — required for the bundled Python helpers that
+  install transcription/cursor dependencies and process transcripts. Install it
+  with Homebrew or from python.org if `python3` is not already available.
 - **[ffmpeg](https://www.ffmpeg.org)** (provides `ffprobe`) — duration checks on the display track,
   timestamp contact sheets for keeper verification, and m4a to wav conversion
   when transcribing narration audio. The transcription helper installs this

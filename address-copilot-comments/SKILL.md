@@ -19,10 +19,19 @@ code, tests, and product intent.
 
 - Use thread-aware GitHub data. Do not rely on flat PR comment lists when
   unresolved status, inline locations, or outdated status matter.
+- Use flat PR comments or connector comment lists only for lightweight top-level
+  summaries. For unresolved review state, inline locations, and outdated status,
+  use GraphQL review threads.
 - Never mark a thread resolved until the issue has been fixed, the user has
   explicitly accepted dismissal, or the thread is demonstrably obsolete.
+- Do not reply on GitHub, resolve review threads, submit a review, push, or
+  re-request Copilot unless the user explicitly asked for that write action.
 - Do not implement comments that are wrong, speculative, or quality-negative.
   Explain why they should be dismissed instead.
+- If a review comment asks for clarification or explanation rather than a code
+  change, draft the response instead of forcing a code edit.
+- If review comments conflict with each other or would cause a behavioral
+  regression, surface the tradeoff before making changes.
 - Present a plan and ask the user what to do before making code changes, unless
   the user has already explicitly asked to fix all valid comments.
 - Commit each approved fix or tightly related fix cluster separately. Stage only
@@ -41,14 +50,21 @@ Determine the repository, PR number, branch, and current head SHA.
 
 - If the user supplied a PR URL or number, use it.
 - Otherwise infer the PR from the current branch with `gh pr view`.
-- Confirm `gh` authentication if GitHub commands fail.
+- Prefer local git context plus `gh pr view --json number,url,headRefName,headRefOid`
+  for current-branch PRs.
+- Confirm `gh` authentication with `gh auth status` if GitHub commands fail,
+  then ask the user to authenticate with `gh auth login` if needed.
 - Record the current PR head SHA before reading review threads. This helps
   distinguish new feedback from stale feedback after re-requesting review.
+- If neither local git context nor `gh` can resolve the PR cleanly, say whether
+  the blocker is missing repository scope, missing PR context, or CLI
+  authentication, then ask for the missing repo/PR identifier or refreshed auth.
 
 Useful commands:
 
 ```bash
 gh pr view --json number,url,headRefName,headRefOid
+gh auth status
 gh api graphql -f owner=OWNER -f name=REPO -F number=PR_NUMBER -f query='
 query($owner:String!, $name:String!, $number:Int!) {
   repository(owner:$owner, name:$name) {
@@ -79,9 +95,17 @@ query($owner:String!, $name:String!, $number:Int!) {
 
 ### 2. Triage Unresolved Copilot Threads
 
+Read review context with thread-aware GraphQL data. If a GitHub connector or app
+is available, it may be useful for PR metadata, patch context, or top-level
+comment summaries, but do not treat connector-only flat comments as the complete
+source of review-thread truth.
+
 Filter to unresolved threads where the relevant review comment is from
 `copilot-pull-request-reviewer`. Keep human review comments separate and do not
 resolve them as part of this loop unless the user explicitly includes them.
+Group related comments by file or behavior area, and separate actionable change
+requests from informational comments, approvals, already-resolved threads, and
+duplicates.
 
 Classify each thread:
 
@@ -170,6 +194,9 @@ gh pr edit PR_NUMBER --repo OWNER/REPO --add-reviewer @copilot
 
 If GitHub refuses because Copilot already has a pending request, inspect the
 review request state and continue to the waiting step.
+
+If `gh` hits an auth or rate-limit issue mid-loop, stop and ask the user to
+refresh authentication or wait rather than guessing from stale data.
 
 ### 6. Wait For The New Review
 
