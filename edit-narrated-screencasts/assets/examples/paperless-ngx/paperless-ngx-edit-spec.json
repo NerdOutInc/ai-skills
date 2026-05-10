@@ -1,0 +1,104 @@
+{
+  "output": "/path/to/paperless-ngx-screencast.mp4",
+  "inputs": {
+    "video": "/path/to/source-screencast.mp4",
+    "audio": "/path/to/narration.m4a"
+  },
+  "timeline": {
+    "width": 3600,
+    "height": 2160,
+    "fps": 60,
+    "segments": [
+      {
+        "type": "video",
+        "start": 0,
+        "end": 0.016667,
+        "setpts_multiplier": 1,
+        "clone_pad_after": 0.983333
+      },
+      {
+        "type": "video",
+        "start": 0,
+        "end": 8,
+        "setpts_multiplier": 2.46
+      },
+      {
+        "type": "video",
+        "start": 8,
+        "end": 10,
+        "setpts_multiplier": 2.02
+      },
+      {
+        "type": "video",
+        "start": 10,
+        "end": 13.2,
+        "setpts_multiplier": 1.025
+      },
+      {
+        "type": "video",
+        "start": 13.2,
+        "end": 17,
+        "setpts_multiplier": 1.126315789
+      },
+      {
+        "type": "video",
+        "start": 17,
+        "end": 28.5,
+        "setpts_multiplier": 0.765217391
+      },
+      {
+        "type": "freeze",
+        "path": "/path/to/freeze-doc-list.png",
+        "duration": 11.88
+      },
+      {
+        "type": "video",
+        "start": 28.5,
+        "end": 39.6,
+        "setpts_multiplier": 1.214414414
+      },
+      {
+        "type": "video",
+        "start": 39.6,
+        "end": 48.716667,
+        "setpts_multiplier": 2.070018333,
+        "clone_pad_after": 1
+      }
+    ],
+    "intro": {
+      "path": "/path/to/intro-card.png",
+      "duration": 4,
+      "fade_duration": 1,
+      "offset": 3
+    },
+    "outro": {
+      "path": "/path/to/outro-card.png",
+      "duration": 3.871552,
+      "fade_duration": 1,
+      "offset": 88.311668
+    },
+    "overlays": [
+      {
+        "path": "/path/to/tooltip-patch.png",
+        "start": 35.7,
+        "end": 55.8,
+        "x": 0,
+        "y": 0
+      }
+    ]
+  },
+  "profiles": {
+    "preview": {
+      "preset": "veryfast",
+      "crf": 28,
+      "scale_width": 1280,
+      "audio_codec": "aac",
+      "audio_bitrate": "128k"
+    },
+    "hq": {
+      "preset": "slow",
+      "crf": 18,
+      "audio_codec": "copy"
+    }
+  }
+}

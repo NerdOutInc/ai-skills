@@ -27,6 +27,14 @@ npx skills add https://github.com/NerdOutInc/ai-skills --list
 
 ## Available Skills
 
+### [edit-narrated-screencasts](edit-narrated-screencasts/README.md)
+
+The `edit-narrated-screencasts` skill helps agents turn an existing screen
+recording and separately recorded narration into a polished screencast. It
+covers media inspection, narration/action timing maps, clip retiming, freeze
+frames, optional project-specific intro/outro stills, transparent artifact
+patches, preview renders, HQ renders, and timestamp contact-sheet verification.
+
 ### [screen-studio](screen-studio/README.md)
 
 The `screen-studio` skill helps agents record polished, repeatable macOS screencasts
