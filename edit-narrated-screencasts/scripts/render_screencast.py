@@ -228,6 +228,25 @@ def fmt(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".")
 
 
+def require_dict(value: Any, label: str) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise SystemExit(f"{label} must be a JSON object")
+    return value
+
+
+def require_list_of_dicts(value: Any, label: str) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise SystemExit(f"{label} must be a JSON array")
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise SystemExit(f"{label}[{index}] must be a JSON object")
+    return value
+
+
 def get_spec_profiles(spec: dict[str, Any]) -> dict[str, Any]:
     profiles = spec.get("profiles")
     if profiles is None:
@@ -302,7 +321,7 @@ class RenderBuilder:
     def make_body(self, video_index: int) -> tuple[str, float]:
         timeline = self.spec.get("timeline", {})
         fps = seconds(timeline.get("fps", 60), "timeline.fps", positive=True)
-        segments = timeline.get("segments") or []
+        segments = require_list_of_dicts(timeline.get("segments"), "timeline.segments")
         if not segments:
             raise SystemExit("timeline.segments must contain at least one segment")
 
@@ -389,6 +408,7 @@ class RenderBuilder:
 
         intro = timeline.get("intro")
         if intro:
+            intro = require_dict(intro, "timeline.intro")
             intro_label, intro_duration, intro_fade = self.make_card(intro, "intro")
             offset = seconds(intro.get("offset", intro_duration - intro_fade), "intro.offset")
             max_offset = intro_duration - intro_fade
@@ -408,6 +428,7 @@ class RenderBuilder:
 
         outro = timeline.get("outro")
         if outro:
+            outro = require_dict(outro, "timeline.outro")
             outro_label, outro_duration, outro_fade = self.make_card(outro, "outro")
             if outro_fade - current_duration > TIMING_TOLERANCE:
                 raise SystemExit(
@@ -432,7 +453,7 @@ class RenderBuilder:
 
     def add_overlays(self, input_label: str) -> str:
         label = input_label
-        overlays = self.spec.get("timeline", {}).get("overlays") or []
+        overlays = require_list_of_dicts(self.spec.get("timeline", {}).get("overlays"), "timeline.overlays")
         for index, overlay in enumerate(overlays):
             path = resolve_path(overlay.get("path"), self.base_dir, f"overlays[{index}].path")
             require_file(path, f"overlays[{index}].path", self.dry_run)
@@ -487,7 +508,8 @@ def build_command(spec: dict[str, Any], base_dir: Path, profile_name: str, outpu
     profile = merged_profile(spec, profile_name)
     builder = RenderBuilder(spec, base_dir, profile, dry_run)
 
-    inputs = spec.get("inputs", {})
+    require_dict(spec.get("timeline"), "spec.timeline")
+    inputs = require_dict(spec.get("inputs"), "spec.inputs")
     source_video = resolve_path(inputs.get("video"), base_dir, "inputs.video")
     source_audio = resolve_path(inputs.get("audio"), base_dir, "inputs.audio")
     require_file(source_video, "inputs.video", dry_run)
