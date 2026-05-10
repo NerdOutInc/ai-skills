@@ -203,6 +203,10 @@ def load_json(path: Path, label: str) -> dict[str, Any]:
         raise SystemExit(
             f"Could not parse {label} at {path} (line {exc.lineno}, col {exc.colno}): {exc.msg}"
         ) from exc
+    except UnicodeDecodeError as exc:
+        raise SystemExit(f"Could not decode {label} at {path}: {exc}") from exc
+    except OSError as exc:
+        raise SystemExit(f"Could not read {label} at {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise SystemExit(f"{label} must be a JSON object: {path}")
     return data
