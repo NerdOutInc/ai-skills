@@ -340,14 +340,25 @@ def probe_media(script: Path, video: Path, audio: Path) -> dict[str, Any]:
     return payload
 
 
+def probe_entry(raw: dict[str, Any], expected: Path, label: str) -> dict[str, Any]:
+    direct = raw.get(str(expected))
+    if isinstance(direct, dict):
+        return direct
+    for key, value in raw.items():
+        if not isinstance(key, str) or not isinstance(value, dict):
+            continue
+        try:
+            if Path(key).expanduser().resolve() == expected:
+                return value
+        except OSError:
+            continue
+    raise SystemExit(f"probe_media.py did not return metadata for {label}: {expected}")
+
+
 def write_media_summary(script: Path, video: Path, audio: Path, output: Path) -> dict[str, Any]:
     raw = probe_media(script, video, audio)
-    video_data = raw.get(str(video))
-    audio_data = raw.get(str(audio))
-    if not isinstance(video_data, dict):
-        raise SystemExit(f"probe_media.py did not return metadata for video: {video}")
-    if not isinstance(audio_data, dict):
-        raise SystemExit(f"probe_media.py did not return metadata for audio: {audio}")
+    video_data = probe_entry(raw, video, "video")
+    audio_data = probe_entry(raw, audio, "audio")
 
     video_summary = summarize_video(video, video_data)
     audio_summary = summarize_audio(audio, audio_data)
