@@ -35,20 +35,21 @@ final renders should go. The skill keeps the original media untouched.
 
 A typical session:
 
-1. **Media inspection.** The agent probes the source video and narration audio
-   for duration, resolution, frame rate, codecs, bitrate, and embedded audio.
-2. **Narration transcription.** The agent transcribes the narration locally and
-   uses `transcript.json` to anchor the timing map.
-3. **Screen analysis.** The agent samples the video with Apple Vision to detect
-   scene changes, stable holds, OCR text changes, and representative frames.
-4. **Timing map.** The agent builds a simple source-time to output-time map so
-   narration beats line up with visible screen actions.
-5. **Edit assets.** The agent extracts freeze frames, creates transparent
+1. **Timing analysis.** The agent runs the bundled analysis package to probe the
+   media, transcribe narration, analyze the screen with Apple Vision, and
+   scaffold `timing-map.md` / `timing-map.json`.
+2. **Evidence review.** The agent reviews transcript segments, scene changes,
+   OCR changes, stable holds, representative frames, confidence labels, and
+   proposed operations before deciding the edit.
+3. **Timing map.** The agent turns the generated scaffold into a checked
+   source-time to output-time edit map so narration beats line up with visible
+   screen actions.
+4. **Edit assets.** The agent extracts freeze frames, creates transparent
    overlay patches for artifacts such as hover tooltips, and prepares any
    project-specific intro/outro stills you requested.
-6. **Preview render.** The agent renders a low-quality preview first and shares
+5. **Preview render.** The agent renders a low-quality preview first and shares
    the file path so you can review timing, text, fades, and patched areas.
-7. **HQ render.** After you approve the preview, the agent renders the
+6. **HQ render.** After you approve the preview, the agent renders the
    high-quality MP4 and verifies it with media probing and timestamp review
    frames.
 
@@ -58,9 +59,9 @@ audio timing constraints, and helper script usage, see [`SKILL.md`](SKILL.md).
 ## Dependencies
 
 The agent checks for these at the point in the workflow where they're needed.
-On macOS with Homebrew, the transcription helper can automatically install
-Whisper/ffmpeg dependencies; Pillow helpers may install Pillow with the active
-Python for frame-review and patch helpers.
+On macOS with Homebrew, the timing-analysis and transcription helpers can
+automatically install Whisper/ffmpeg dependencies; Pillow helpers may install
+Pillow with the active Python for frame-review and patch helpers.
 
 ### Required
 
@@ -78,8 +79,8 @@ Python for frame-review and patch helpers.
 
 - **[ffmpeg](https://www.ffmpeg.org)** (provides `ffprobe`) - media inspection,
   transcription audio conversion, frame extraction, contact sheets, timeline
-  rendering, and MP4 output. The transcription helper installs this
-  automatically on macOS/Homebrew when needed:
+  rendering, and MP4 output. The timing-analysis and transcription helpers
+  install this automatically on macOS/Homebrew when needed:
 
   ```bash
   brew install ffmpeg
@@ -95,9 +96,9 @@ Python for frame-review and patch helpers.
   ```
 
 - **[whisper-cpp](https://github.com/ggml-org/whisper.cpp)** - local narration
-  transcription. On macOS with Homebrew, `scripts/transcribe_narration.py`
-  installs the package and downloads `ggml-base.en.bin` automatically when
-  needed:
+  transcription. On macOS with Homebrew, the timing-analysis and transcription
+  helpers install the package and download `ggml-base.en.bin` automatically
+  when needed:
 
   ```bash
   brew install whisper-cpp
@@ -107,12 +108,20 @@ Python for frame-review and patch helpers.
 
 These ship inside the skill directory and don't require a separate install:
 
+- `scripts/prepare_timing_analysis.py` - default pre-edit analysis entrypoint;
+  probes media, transcribes narration, runs Apple Vision screen analysis, and
+  writes `media-summary.json`, `transcript.json`, `screen-events.json`,
+  `timing-map.md`, and `timing-map.json`. It also writes the best-effort
+  `screen-events-contact-sheet.jpg` when usable frame-backed screen events are
+  available and warns when the sheet is absent.
 - `scripts/probe_media.py` - summarizes source video/audio metadata with
   `ffprobe`.
 - `scripts/transcribe_narration.py` - transcribes narration audio with local
-  whisper.cpp and writes `transcript.json` plus raw Whisper outputs.
+  whisper.cpp and writes `transcript.json` plus raw Whisper outputs. Normally
+  invoked by `prepare_timing_analysis.py`.
 - `scripts/analyze_screen_events.py` - coordinates macOS Apple Vision screen
-  analysis and writes `screen-events.json` plus review artifacts.
+  analysis and writes `screen-events.json` plus review artifacts. Normally
+  invoked by `prepare_timing_analysis.py`.
 - `scripts/vision_frame_analysis.swift` - extracts OCR and feature-print
   similarity from sampled screencast frames using Apple Vision.
 - `scripts/extract_review_frames.py` - extracts timestamped frames and optional
