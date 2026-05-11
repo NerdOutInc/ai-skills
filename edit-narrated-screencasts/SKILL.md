@@ -1,5 +1,6 @@
 ---
 name: edit-narrated-screencasts
+disable-model-invocation: true
 description: >
   Edit narrated screencasts by syncing existing narration to screen actions,
   analyzing screen events with Apple Vision, retiming footage, inserting freeze
