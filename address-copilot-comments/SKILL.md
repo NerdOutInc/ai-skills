@@ -210,8 +210,10 @@ threads or thread comments. Continue pagination until every relevant
 `pageInfo.hasNextPage` value is false.
 
 Filter to unresolved threads where the relevant review comment is from
-`copilot-pull-request-reviewer`. Keep human review comments separate and do not
-resolve them as part of this loop unless the user explicitly includes them.
+`copilot-pull-request-reviewer`. This is the review-comment author login, not
+the reviewer selector used to request a new Copilot review. Keep human review
+comments separate and do not resolve them as part of this loop unless the user
+explicitly includes them.
 Group related comments by file or behavior area, and separate actionable change
 requests from informational comments, approvals, already-resolved threads, and
 duplicates.
@@ -307,6 +309,9 @@ Re-request Copilot:
 ```bash
 gh pr edit PR_NUMBER --repo OWNER/REPO --add-reviewer @copilot
 ```
+
+Use `@copilot` for the `gh` reviewer selector even though Copilot review
+comments appear from `copilot-pull-request-reviewer`.
 
 If GitHub refuses because Copilot already has a pending request, inspect the
 review request state and continue to the waiting step.
