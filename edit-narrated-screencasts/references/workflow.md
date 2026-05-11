@@ -6,26 +6,56 @@ requiring a new recording.
 
 ## 0. Check Dependencies
 
-The scripts depend on `ffmpeg` (with `ffprobe`) and Python's Pillow library.
-If either is missing on the user's machine, ask before installing rather than
-running `brew install` or `pip install` unprompted.
+The rendering and frame-review scripts depend on `ffmpeg` (with `ffprobe`) and
+Python's Pillow library. Screen analysis requires macOS, Swift from the macOS
+Command Line Tools, and Apple Vision. The timing-analysis helper can
+automatically install `ffmpeg`, `whisper-cpp`, and the default Whisper model
+when needed on macOS with Homebrew. Pillow-using helpers can automatically
+install Pillow with the active Python when needed. Use `--no-install` in
+locked-down environments.
 
 ```bash
 command -v ffmpeg
 command -v ffprobe
+command -v swift
 python3 -c "import PIL" 2>/dev/null && echo "Pillow OK" || echo "Pillow missing"
 ```
 
-## 1. Inspect the Media
+## 1. Prepare Timing Analysis
 
 In the examples below, `$SKILL_DIR` means the path to the installed
 `edit-narrated-screencasts` skill directory.
 
-Run:
+Run the orchestrator before building the edit map:
 
 ```bash
-python3 "$SKILL_DIR/scripts/probe_media.py" source.mp4 narration.m4a
+python3 "$SKILL_DIR/scripts/prepare_timing_analysis.py" \
+  --video source.mp4 \
+  --audio narration.m4a \
+  --out /tmp/my-edit/analysis
 ```
+
+Use `--force` to regenerate `transcript.json` and `screen-events.json` in an
+existing analysis directory. Use `--no-install` in locked-down environments. On
+macOS with Homebrew, the helper may install `ffmpeg` and `whisper-cpp` and
+download `$HOME/.cache/whisper.cpp/ggml-base.en.bin`.
+
+The analysis directory should contain these required artifacts:
+
+- `media-summary.json`
+- `transcript.json`
+- `screen-events.json`
+- `timing-map.md`
+- `timing-map.json`
+
+It may also contain `screen-events-contact-sheet.jpg`. The contact sheet is a
+best-effort review aid generated when screen analysis has usable frame-backed
+events; `prepare_timing_analysis.py` warns when it is absent, and the agent must
+then verify screen events from the frame paths in `screen-events.json`.
+
+Use lower-level helpers such as `transcribe_narration.py` and
+`analyze_screen_events.py` directly only when you need to debug or regenerate
+one artifact family. The normal path is `prepare_timing_analysis.py`.
 
 Record:
 
@@ -38,10 +68,36 @@ Record:
   does not map embedded source-video audio; provide narration or replacement
   audio with `inputs.audio` when the output should include audio.
 - The target output resolution and frame rate.
+- Transcript cues and timestamps from `transcript.json`.
 
 Keep the original source files untouched.
 
-## 2. Build a Timing Map
+## 2. Review the Timing Map
+
+Start with `timing-map.md` for human review and use `timing-map.json` when a
+structured source is easier for the agent to inspect. These files are evidence,
+not a render spec and not final alignment.
+
+Review each generated row:
+
+- Compare the narration segment with the suggested source range.
+- Open the referenced frame or contact sheet when confidence is low or the OCR
+  text is ambiguous.
+- Treat proposed operations as prompts: `align_to_event`, `review_hold`,
+  `review_freeze`, `review_speed_change`, and `needs_manual_match`.
+- Verify important timestamps visually before rendering.
+
+Use the analysis artifacts this way:
+
+- Transcript segments identify narration beats.
+- `scene_change` marks likely action/page/modal boundaries.
+- `ocr_change` marks visible text or state changes that can confirm the screen
+  now matches a narration phrase.
+- `stable_hold` marks waits that may be sped up, trimmed, or replaced with a
+  freeze frame while narration continues.
+- `anchor` frames are regular reference samples for visual review.
+
+## 3. Build a Checked Edit Map
 
 Create a simple table with these columns:
 
@@ -50,6 +106,15 @@ Create a simple table with these columns:
 - Matching source-video action.
 - Source time range.
 - Edit operation.
+
+Use `screen-events.json` to choose candidate source ranges:
+
+- `scene_change` marks likely action/page/modal boundaries.
+- `stable_hold` marks waits that may be sped up, trimmed, or replaced with a
+  freeze frame while narration continues.
+- `ocr_change` marks visible text or state changes that can confirm the screen
+  now matches a narration phrase.
+- `anchor` frames are regular reference samples for visual review.
 
 Common operations:
 
@@ -65,7 +130,7 @@ the intro card. Make sure the m4a starts with silence equal to
 `intro.duration - intro.fade_duration` (e.g. ~3s of silence for a 4s intro
 with a 1s fade). See `edit-spec.md` for the full constraint.
 
-## 3. Generate or Collect Still Assets
+## 4. Generate or Collect Still Assets
 
 If the edit needs intro or outro stills, create them as one-off project assets
 using the user's supplied brand files, screenshots, or generated artwork. Keep
@@ -89,7 +154,7 @@ python3 "$SKILL_DIR/scripts/make_overlay_patch.py" \
   --bbox 1800,900,420,180
 ```
 
-## 4. Render Preview First
+## 5. Render Preview First
 
 Render the low-quality version:
 
@@ -110,7 +175,7 @@ Use the preview to check:
 - Overlay patch alignment.
 - Whether the outro starts at the right narration phrase.
 
-## 5. Render HQ
+## 6. Render HQ
 
 After the user accepts the preview:
 

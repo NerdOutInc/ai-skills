@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import math
 import re
 import shlex
@@ -11,6 +12,53 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+
+def pip_install_command() -> list[str]:
+    cmd = [sys.executable, "-m", "pip", "install"]
+    if sys.prefix == getattr(sys, "base_prefix", sys.prefix):
+        cmd.append("--user")
+    cmd.append("pillow")
+    return cmd
+
+
+def pillow_install_hint() -> str:
+    return shlex.join(pip_install_command())
+
+
+def install_pillow(no_install: bool) -> None:
+    if no_install:
+        raise SystemExit(
+            "Pillow is required for contact sheets. Install it with:\n"
+            f"  {pillow_install_hint()}\n"
+            "Or use --no-sheet to skip contact sheet generation."
+        )
+    cmd = pip_install_command()
+    print(shlex.join(cmd), file=sys.stderr, flush=True)
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(
+            "Automatic Pillow install failed. Install it with:\n"
+            f"  {pillow_install_hint()}\n"
+            "Or use --no-sheet to skip contact sheet generation."
+        ) from exc
+
+
+def load_pillow(no_install: bool):
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        install_pillow(no_install)
+        importlib.invalidate_caches()
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+        except ImportError as exc:
+            raise SystemExit(
+                "Pillow was installed, but this Python process still cannot import PIL. "
+                "Try rerunning the command."
+            ) from exc
+    return Image, ImageDraw, ImageFont
 
 
 def parse_timestamp(value: str) -> float:
@@ -138,12 +186,15 @@ def extract_frames(video: Path, output_dir: Path, timestamps: list[float], args:
     return frames
 
 
-def make_contact_sheet(frames: list[Path], timestamps: list[float], output: Path, width: int, cols: int) -> None:
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-    except ImportError as exc:
-        raise SystemExit("Pillow is required for contact sheets. Install pillow or use --no-sheet.") from exc
-
+def make_contact_sheet(
+    frames: list[Path],
+    timestamps: list[float],
+    output: Path,
+    width: int,
+    cols: int,
+    no_install: bool,
+) -> None:
+    Image, ImageDraw, ImageFont = load_pillow(no_install)
     existing_pairs = [(frame, ts) for frame, ts in zip(frames, timestamps) if frame.exists()]
     if not existing_pairs:
         raise SystemExit("No extracted frames exist; cannot build contact sheet.")
@@ -187,6 +238,7 @@ def main() -> int:
     parser.add_argument("--sheet-width", type=positive_int, default=640, help="Width of each contact sheet cell")
     parser.add_argument("--cols", type=positive_int, default=3, help="Contact sheet columns")
     parser.add_argument("--no-sheet", action="store_true", help="Skip contact sheet generation")
+    parser.add_argument("--no-install", action="store_true", help="Do not install Pillow automatically")
     parser.add_argument("--dry-run", action="store_true", help="Print ffmpeg commands without running them")
     args = parser.parse_args()
 
@@ -198,7 +250,7 @@ def main() -> int:
     frames = extract_frames(video, args.output_dir.expanduser(), timestamps, args)
     if not args.no_sheet and not args.dry_run:
         sheet = args.sheet or args.output_dir.expanduser() / "contact-sheet.jpg"
-        make_contact_sheet(frames, timestamps, sheet, args.sheet_width, args.cols)
+        make_contact_sheet(frames, timestamps, sheet, args.sheet_width, args.cols, args.no_install)
     return 0
 
 

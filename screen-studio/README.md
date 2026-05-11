@@ -6,6 +6,9 @@ clean Helium browser setup for web demos, scripted dry runs, coordinate
 calibration with `cliclick`, Screen Studio shortcut usage, smoke captures, and
 keeper-take verification with `ffprobe` and timestamp contact sheets.
 
+This skill is macOS-only because it drives Screen Studio and macOS UI
+automation.
+
 The full agent instructions live in [`SKILL.md`](SKILL.md).
 
 ## Install
@@ -80,17 +83,22 @@ See the [Recording Status Server](SKILL.md#recording-status-server) section of
 
 ## Dependencies
 
-The agent checks for these at the point in the workflow where they're needed
-and will ask before running `brew install`. They're listed here so you can
-pre-install them once and skip the prompt on every session.
+The agent checks for these at the point in the workflow where they're needed.
+On macOS with Homebrew, bundled helpers can automatically install their own
+direct dependencies: ffmpeg/whisper-cpp for transcription, and cliclick for
+visible cursor movement.
 
 ### Required
 
 - **[Screen Studio](https://www.screen.studio/)** — the recording app this
   skill drives. Install from the developer's site.
+- **Python 3.10 or newer** — required for the bundled Python helpers that
+  install transcription/cursor dependencies and process transcripts. Install it
+  with Homebrew or from python.org if `python3` is not already available.
 - **[ffmpeg](https://www.ffmpeg.org)** (provides `ffprobe`) — duration checks on the display track,
-  timestamp contact sheets for keeper verification, and m4a→wav conversion
-  when transcribing narration audio:
+  timestamp contact sheets for keeper verification, and m4a to wav conversion
+  when transcribing narration audio. The transcription helper installs this
+  automatically on macOS/Homebrew when needed:
 
   ```bash
   brew install ffmpeg
@@ -98,7 +106,8 @@ pre-install them once and skip the prompt on every session.
 
 - **[cliclick](https://github.com/BlueM/cliclick)** — visible cursor movement during keeper takes. The agent uses
   it to move the actual macOS pointer at a human pace rather than teleporting
-  the cursor with scripting:
+  the cursor with scripting. `scripts/ensure_cliclick.py` installs this
+  automatically on macOS/Homebrew when needed:
 
   ```bash
   brew install cliclick
@@ -117,22 +126,12 @@ pre-install them once and skip the prompt on every session.
   demos. The agent falls back to your default browser if Helium isn't
   installed.
 - **[whisper-cpp](https://github.com/ggml-org/whisper.cpp)** — local audio transcription, only needed when you provide
-  a voice memo without a written actions file. The Homebrew formula installs
-  the `whisper-cli` binary used by the agent:
+  a voice memo without a written actions file. `scripts/transcribe_narration.py`
+  installs the Homebrew package and downloads `ggml-base.en.bin` automatically
+  when needed:
 
   ```bash
   brew install whisper-cpp
-  ```
-
-  After install, place a model under `$HOME/.cache/whisper.cpp/`. The
-  known-good default for English narration on Apple Silicon is
-  `ggml-base.en.bin`:
-
-  ```bash
-  mkdir -p "$HOME/.cache/whisper.cpp"
-  curl -L \
-    -o "$HOME/.cache/whisper.cpp/ggml-base.en.bin" \
-    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
   ```
 
 ### Bundled (no install needed)
@@ -143,6 +142,10 @@ These ship inside the skill directory and don't require a separate install:
   recording status server. No Python, Node, Go, or Homebrew runtime needed.
 - `scripts/scroll-wheel.swift` — Swift helper for trackpad-style smooth
   scrolling during recordings. Runs via the system `swift` interpreter.
+- `scripts/ensure_cliclick.py` — on macOS with Homebrew, installs `cliclick`
+  when missing and prints the executable path for visible cursor movement.
+- `scripts/transcribe_narration.py` — local whisper.cpp transcription helper
+  that writes normalized `transcript.json` plus raw Whisper outputs.
 - `scripts/vision-find-text.swift` — Apple Vision text-recognition helper
   that converts on-screen text into `cliclick` coordinates. Same Swift
   runtime requirement.

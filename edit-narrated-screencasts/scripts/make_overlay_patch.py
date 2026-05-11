@@ -4,15 +4,55 @@
 from __future__ import annotations
 
 import argparse
+import importlib
+import shlex
+import subprocess
 import sys
 from pathlib import Path
 
 
-def load_pillow():
+def pip_install_command() -> list[str]:
+    cmd = [sys.executable, "-m", "pip", "install"]
+    if sys.prefix == getattr(sys, "base_prefix", sys.prefix):
+        cmd.append("--user")
+    cmd.append("pillow")
+    return cmd
+
+
+def pillow_install_hint() -> str:
+    return shlex.join(pip_install_command())
+
+
+def install_pillow(no_install: bool) -> None:
+    if no_install:
+        raise SystemExit(
+            "Pillow is required. Install it with:\n"
+            f"  {pillow_install_hint()}"
+        )
+    cmd = pip_install_command()
+    print(shlex.join(cmd), file=sys.stderr, flush=True)
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(
+            "Automatic Pillow install failed. Install it with:\n"
+            f"  {pillow_install_hint()}"
+        ) from exc
+
+
+def load_pillow(no_install: bool):
     try:
         from PIL import Image, ImageChops, ImageFilter
-    except ImportError as exc:
-        raise SystemExit("Pillow is required. Install it with: python3 -m pip install pillow") from exc
+    except ImportError:
+        install_pillow(no_install)
+        importlib.invalidate_caches()
+        try:
+            from PIL import Image, ImageChops, ImageFilter
+        except ImportError as exc:
+            raise SystemExit(
+                "Pillow was installed, but this Python process still cannot import PIL. "
+                "Try rerunning the command."
+            ) from exc
     return Image, ImageChops, ImageFilter
 
 
@@ -98,10 +138,11 @@ def main() -> int:
     parser.add_argument("--diff-alpha", action="store_true", help="Use frame difference as alpha")
     parser.add_argument("--threshold", type=threshold_int, default=18, help="Difference threshold for --diff-alpha (0..255)")
     parser.add_argument("--expand", type=non_negative_int, default=3, help="Pixel expansion for --diff-alpha mask (>= 0)")
+    parser.add_argument("--no-install", action="store_true", help="Do not install Pillow automatically")
     parser.add_argument("--dry-run", action="store_true", help="Validate inputs without writing")
     args = parser.parse_args()
 
-    Image, ImageChops, ImageFilter = load_pillow()
+    Image, ImageChops, ImageFilter = load_pillow(args.no_install)
 
     clean_path = args.clean.expanduser()
     dirty_path = args.dirty.expanduser()

@@ -419,87 +419,24 @@ If the user provides audio and no complete actions file, transcribe the audio
 before planning the recording. Use the transcript to identify the expected
 on-screen actions.
 
-Check local transcription tooling before giving up:
+Run the bundled helper:
 
 ```bash
-command -v whisper || true
-command -v mlx_whisper || true
-command -v whisper-cli || true
-command -v whisperx || true
-
-python3 - <<'PY'
-for mod in ("whisper", "faster_whisper", "mlx_whisper", "torch", "openai"):
-    try:
-        __import__(mod)
-        print(mod, "OK")
-    except Exception as exc:
-        print(mod, "NO", type(exc).__name__)
-PY
+python3 "$SKILL_DIR/scripts/transcribe_narration.py" \
+  narration.m4a \
+  --out /tmp/screen-studio-transcript
 ```
 
-If no transcription tool is installed, ask the user before installing one.
-The preferred local path is `whisper.cpp` via Homebrew because it is fast on
-Apple Silicon and runs offline:
-
-```bash
-brew install whisper-cpp
-```
-
-After install, download a model (the known-good model on this Mac is
-`ggml-base.en.bin`). Place it under `$HOME/.cache/whisper.cpp/`:
-
-```bash
-mkdir -p "$HOME/.cache/whisper.cpp"
-curl -L \
-  -o "$HOME/.cache/whisper.cpp/ggml-base.en.bin" \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
-```
-
-`ffmpeg` and `ffprobe` are required for audio conversion, duration checks, and
-the contact sheet. `ffprobe` ships with `ffmpeg`. If either is missing
-(`command -v ffmpeg` or `command -v ffprobe` returns nothing), ask the user
-before installing:
-
-```bash
-brew install ffmpeg
-```
-
-The known-good local path is `/opt/homebrew/bin/whisper-cli`, from
-`whisper.cpp`. If it exists, find the cached model:
-
-```bash
-find "$HOME/.cache/whisper.cpp" /opt/homebrew -maxdepth 5 \
-  -name 'ggml-*.bin' 2>/dev/null
-```
-
-The known-good model path on this Mac is:
-
-```text
-$HOME/.cache/whisper.cpp/ggml-base.en.bin
-```
-
-Convert m4a files to wav for this `whisper-cli` build:
-
-```bash
-ffmpeg -y -i video.m4a \
-  -ar 16000 \
-  -ac 1 \
-  -c:a pcm_s16le \
-  /tmp/video.wav
-
-whisper-cli \
-  -m "$HOME/.cache/whisper.cpp/ggml-base.en.bin" \
-  -f /tmp/video.wav \
-  -l en \
-  -otxt \
-  -osrt \
-  -oj \
-  -of /tmp/video-transcript
-```
+The helper uses local whisper.cpp. On macOS with Homebrew, it can automatically
+install `ffmpeg` and `whisper-cpp` when missing. It downloads
+`$HOME/.cache/whisper.cpp/ggml-base.en.bin`, converts the audio to 16 kHz mono
+WAV, and writes `/tmp/screen-studio-transcript/transcript.json` plus raw
+`whisper.txt`, `whisper.srt`, and `whisper.json` files. Pass `--no-install`
+in locked-down environments or when dependencies must be preinstalled manually.
 
 Create or update the actions file with:
 
-- Audio path, duration, and transcript cues.
+- Audio path, duration, and transcript cues from `transcript.json`.
 - Planned screen actions and expected visible states.
 - Setup and reset steps.
 - Coordinates, helper commands, waits, and state checks.
@@ -549,15 +486,21 @@ Restore Codex after recording stops so the user can see verification work.
 Use `cliclick` for visible cursor movement during recorded interactions.
 Keeper takes should move the actual macOS pointer at a human pace.
 
-- Check for `cliclick` with `command -v cliclick`.
-- If missing, ask before installing it.
+- Before first use, ensure `cliclick` is available:
+
+  ```bash
+  CLICLICK="$(python3 "$SKILL_DIR/scripts/ensure_cliclick.py")"
+  ```
+
+  On macOS with Homebrew, the helper can automatically install `cliclick` when
+  missing. Pass `--no-install` in locked-down environments.
 - `cliclick` uses global macOS display coordinates.
 - Do not pass Computer Use or screenshot coordinates directly to `cliclick`.
 - Prefer live pointer coordinates when possible. Put the pointer over the
   target, then read the exact `cliclick` coordinate with:
 
   ```bash
-  cliclick p:.
+  "$CLICLICK" p:.
   ```
 
 - If using a screenshot, convert from screenshot pixels to global logical
@@ -685,7 +628,7 @@ smooth_scroll_down_and_back() {
 Example:
 
 ```bash
-cliclick -e 300 m:1200,390 c:.
+"$CLICLICK" -e 300 m:1200,390 c:.
 sleep 0.2
 smooth_scroll_down_and_back 5 5 0.034 0.18 "21,42,75,117,162,117,75,42,21" 0.8
 ```
