@@ -7,7 +7,6 @@ description: >
   user-supplied intro/outro stills, and rendering preview or high-quality MP4
   outputs. Use when asked to combine a voiceover with existing screen recording
   footage or polish a screencast edit.
-disable-model-invocation: true
 ---
 
 # Edit Narrated Screencasts
@@ -27,40 +26,50 @@ Follow each phase in order.
 
 ### Phase 1 — Inspect
 
-1. Inspect all media with `ffprobe` or `scripts/probe_media.py`.
-   - Capture source duration, resolution, frame rate, codec, bitrate, audio
-     duration, and whether the source has embedded audio.
+1. Run the timing-analysis package before building the edit plan.
+   - Run:
+
+     ```bash
+     python3 "$SKILL_DIR/scripts/prepare_timing_analysis.py" \
+       --video source.mp4 \
+       --audio narration.m4a \
+       --out /tmp/my-edit/analysis
+     ```
+
+   - Use `--force` to rebuild transcript and screen-analysis artifacts when
+     rerunning against the same output directory.
+   - Pass `--no-install` in locked-down environments or when dependencies must
+     be preinstalled manually.
+   - The helper writes `media-summary.json`, `transcript.json`,
+     `screen-events.json`, `screen-events-contact-sheet.jpg`, `timing-map.md`,
+     and `timing-map.json` in the output directory.
+   - Treat `timing-map.md` and `timing-map.json` as evidence scaffolds, not a
+     render spec and not final alignment.
+
+2. Review the analysis artifacts.
+   - Use `media-summary.json` to capture source duration, resolution, frame
+     rate, codec, bitrate, audio duration, and whether the source has embedded
+     audio.
+   - Use `transcript.json` segments as narration beats.
+   - Use `screen-events.json` and the contact sheet as screen evidence:
+     `scene_change` marks action/page/modal boundaries, `ocr_change` confirms
+     visible text or state changes, `stable_hold` suggests waits/trims/speed-up
+     or freeze-frame candidates, and `anchor` frames provide regular visual
+     review points.
+   - Use confidence and proposed operations in the timing map as review
+     prompts. Verify important timestamps visually before rendering.
    - Preserve the source resolution and frame rate for HQ unless the user
      explicitly requests downscaling or upscaling. The renderer auto-detects
      resolution and frame rate when the source file is available; set
      `timeline.fps` explicitly for placeholder-only dry runs.
 
-2. Transcribe the narration with `scripts/transcribe_narration.py` before
-   building the timing map.
-   - Run `python3 "$SKILL_DIR/scripts/transcribe_narration.py" narration.m4a --out /tmp/my-edit/transcript`.
-   - Use `/tmp/my-edit/transcript/transcript.json` for narration cues and
-     timestamps; raw Whisper `.txt`, `.srt`, and `.json` files are written in
-     the same output directory.
-   - On macOS with Homebrew, the helper may automatically install `ffmpeg` and
-     `whisper-cpp` and download the default local Whisper model. Pass
-     `--no-install` in locked-down environments or when dependencies must be
-     preinstalled manually.
-
-3. Analyze screen events with `scripts/analyze_screen_events.py` before building
-   the timing map.
-   - Run `python3 "$SKILL_DIR/scripts/analyze_screen_events.py" --video source.mp4 --out /tmp/my-edit/screen-analysis`.
-   - Use `/tmp/my-edit/screen-analysis/screen-events.json` and
-     `/tmp/my-edit/screen-analysis/screen-events-contact-sheet.jpg` as evidence
-     for scene changes, stable holds, OCR text changes, and representative
-     frames.
-   - Treat the analysis as evidence, not final alignment. Verify important
-     timestamps visually before rendering.
-
 ### Phase 2 — Edit
 
-4. Build a timing map.
+3. Turn the generated timing map into a checked edit map.
+   - Start from `timing-map.md` or `timing-map.json`; do not treat it as a
+     finished edit decision.
    - Mark narration beats and the matching screen actions.
-   - Use `screen-events.json` to identify likely source-video action
+   - Use screen-event candidates to identify likely source-video action
      boundaries, loading waits, state changes, and freeze-frame candidates.
    - If narration and screen actions do not align, notify the user and suggest
      adjustments to either the narration or the video.
@@ -69,7 +78,7 @@ Follow each phase in order.
    - Keep a simple table of source time, output time, action, narration cue,
      and edit operation.
 
-5. Create supporting stills.
+4. Create supporting stills.
    - If the user asks for intro/outro stills, treat them as project-specific
      still assets. Use supplied artwork, inspect the user's actual brand/source
      files, or create one-off images in the requested output directory. Do not
@@ -81,19 +90,19 @@ Follow each phase in order.
 
 ### Phase 3 — Render
 
-6. Render a preview first.
+5. Render a preview first.
    - Use `scripts/render_screencast.py --profile preview`.
    - Share the preview path and ask the user to review timing, text, fades, and
      patched areas.
    - Expect several rounds of small timing/design adjustments.
 
-7. Render HQ after approval.
+6. Render HQ after approval.
    - Use `scripts/render_screencast.py --profile hq`.
    - Prefer H.264, `-preset slow`, `-crf 18`, original FPS, `yuv420p`, and audio
      stream copy when the audio is already AAC (m4a/MP4-compatible).
    - Use `-movflags +faststart` for shareable MP4 output.
 
-8. Verify the final.
+7. Verify the final.
    - Probe the final file.
    - Generate a contact sheet around intros, fades, patches, important actions,
      and the outro.
@@ -119,18 +128,24 @@ Follow each phase in order.
   See `references/edit-spec.md` for details.
 - Do not run unrelated dependency installs without user approval. Bundled
   helpers may automatically install their own direct runtime dependencies:
-  on macOS with Homebrew, `transcribe_narration.py` may install `ffmpeg` and
-  `whisper-cpp` and download the default Whisper model; Pillow-using helpers may
-  install Pillow with the active Python, using `--user` only for non-virtualenv
-  Python installs. Pass `--no-install` in locked-down environments.
+  on macOS with Homebrew, `prepare_timing_analysis.py` and
+  `transcribe_narration.py` may install `ffmpeg`/`ffprobe` or `whisper-cpp` and
+  download the default Whisper model; Pillow-using helpers may install Pillow
+  with the active Python, using `--user` only for non-virtualenv Python
+  installs. Pass `--no-install` in locked-down environments.
 
 ## Bundled Helpers
 
 - `scripts/probe_media.py`: summarize source video/audio metadata.
+- `scripts/prepare_timing_analysis.py`: run media probing, narration
+  transcription, Apple Vision screen analysis, and timing-map scaffolding in one
+  analysis package.
 - `scripts/transcribe_narration.py`: transcribe narration with local
-  whisper.cpp and write normalized `transcript.json`.
+  whisper.cpp and write normalized `transcript.json`. Normally invoked by
+  `prepare_timing_analysis.py`.
 - `scripts/analyze_screen_events.py`: sample the source video, run Apple Vision
   screen analysis, and write `screen-events.json` plus a contact sheet.
+  Normally invoked by `prepare_timing_analysis.py`.
 - `scripts/vision_frame_analysis.swift`: Apple Vision OCR and feature-print
   analysis for sampled frames.
 - `scripts/extract_review_frames.py`: extract timestamped frames and contact
