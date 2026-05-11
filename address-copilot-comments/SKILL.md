@@ -28,8 +28,8 @@ code, tests, and product intent.
 - Never mark a thread resolved until the issue has been fixed, the user has
   explicitly accepted dismissal, or the thread is demonstrably obsolete.
 - Do not reply on GitHub, resolve review threads, submit a review, push, or
-  re-request Copilot unless the user explicitly asked for that write action or
-  selected **Autonomous mode** for this review loop.
+  re-request Copilot unless the user selected **Autonomous mode** for this
+  review loop or explicitly approved that specific write action.
 - Do not implement comments that are wrong, speculative, or quality-negative.
   Explain why they should be dismissed instead.
 - If a review comment asks for clarification or explanation rather than a code
@@ -54,34 +54,58 @@ code, tests, and product intent.
 
 ### 1. Select Review Mode
 
-At the start of the interaction, ask the user how much autonomy they want unless
-their latest request already clearly selects a mode.
+At the start of the interaction, make the user choose a review mode before
+editing files or performing GitHub write actions. Do not infer **Autonomous
+mode** from broad task wording such as "address the comments," "fix everything
+valid," or "resolve and re-request."
 
-Prompt:
+If a native multiple-choice user-input tool is available, use it with two
+choices and the tool's custom/free-form response option. Put **Hands-on mode**
+first as the recommended option:
 
 ```text
 How should I handle Copilot's review comments?
 
-1. Autonomous mode: I will triage the comments, fix everything I judge valid,
+1. Hands-on mode (Recommended): I will triage the comments and propose changes
+   first, then wait for your approval before editing files or performing GitHub
+   write actions.
+2. Autonomous mode: I will triage the comments, fix everything I judge valid,
    commit and push the changes, resolve fixed threads, re-request Copilot, and
    repeat until there are no meaningful unresolved Copilot comments.
-2. Hands-on mode: I will triage the comments and propose changes first, then
-   wait for your approval before editing files or performing GitHub write
-   actions.
 ```
+
+If no multiple-choice tool is available, ask the same question in plain text and
+tell the user they can answer with "Hands-on mode," "Autonomous mode," or custom
+constraints such as "fix locally but do not push."
+
+Accept **Autonomous mode** only when the user explicitly selects it, names it,
+or gives unambiguous custom instructions that include the intended write actions
+such as committing, pushing, resolving review threads, and re-requesting review.
+Treat ambiguous custom responses as **Hands-on mode** until clarified.
 
 Mode behavior:
 
+- **Hands-on mode** is read-only until the user approves a specific plan. Fetch
+  and classify comments, present the proposed fixes/dismissals, then wait.
 - **Autonomous mode** is explicit permission for this review loop to edit files,
   commit, push, reply to fixed threads, resolve fixed/obsolete threads, and
   re-request Copilot review. Still reject wrong or quality-negative comments;
   do not blindly appease Copilot.
-- **Hands-on mode** is read-only until the user approves a specific plan. Fetch
-  and classify comments, present the proposed fixes/dismissals, then wait.
-- If the user says "address the comments", "fix everything valid", "resolve and
-  re-request", or equivalent, treat that as Autonomous mode.
-- If the user says "check them out", "review the comments", "show me the plan",
-  or equivalent, treat that as Hands-on mode.
+
+Plain-text fallback prompt:
+
+```text
+How should I handle Copilot's review comments?
+
+1. Hands-on mode (Recommended): I will triage the comments and propose changes
+   first, then wait for your approval before editing files or performing GitHub
+   write actions.
+2. Autonomous mode: I will triage the comments, fix everything I judge valid,
+   commit and push the changes, resolve fixed threads, re-request Copilot, and
+   repeat until there are no meaningful unresolved Copilot comments.
+
+You can also reply with custom constraints.
+```
 
 ### 2. Resolve PR Context
 
@@ -104,21 +128,30 @@ Useful commands:
 ```bash
 gh pr view --json number,url,headRefName,headRefOid
 gh auth status
-gh api graphql -f owner=OWNER -f name=REPO -F number=PR_NUMBER -f query='
-query($owner:String!, $name:String!, $number:Int!) {
+gh api graphql -f owner=OWNER -f name=REPO -F number=PR_NUMBER -F threadsCursor=null -f query='
+query($owner:String!, $name:String!, $number:Int!, $threadsCursor:String) {
   repository(owner:$owner, name:$name) {
     pullRequest(number:$number) {
       headRefName
       headRefOid
-      reviewThreads(first:100) {
+      reviewThreads(first:100, after:$threadsCursor) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
         nodes {
           id
           isResolved
           isOutdated
           path
           line
-          comments(first:20) {
+          comments(first:100) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
             nodes {
+              id
               author { login }
               body
               createdAt
@@ -132,12 +165,49 @@ query($owner:String!, $name:String!, $number:Int!) {
 }'
 ```
 
+Always page through all `reviewThreads` before deciding the unresolved count or
+whether the PR is clean. Repeat the query with `threadsCursor` set to
+`reviewThreads.pageInfo.endCursor` until `hasNextPage` is false.
+
+If any thread's `comments.pageInfo.hasNextPage` is true, fetch the remaining
+comments for that thread before classifying it:
+
+```bash
+gh api graphql -f threadId=THREAD_ID -F commentsCursor=null -f query='
+query($threadId:ID!, $commentsCursor:String) {
+  node(id:$threadId) {
+    ... on PullRequestReviewThread {
+      comments(first:100, after:$commentsCursor) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          author { login }
+          body
+          createdAt
+          url
+        }
+      }
+    }
+  }
+}'
+```
+
+Repeat the thread-comments query with `commentsCursor` set to
+`comments.pageInfo.endCursor` until `hasNextPage` is false.
+
 ### 3. Triage Unresolved Copilot Threads
 
 Read review context with thread-aware GraphQL data. If a GitHub connector or app
 is available, it may be useful for PR metadata, patch context, or top-level
 comment summaries, but do not treat connector-only flat comments as the complete
 source of review-thread truth.
+
+Do not classify, resolve, or report a clean PR from a partial page of review
+threads or thread comments. Continue pagination until every relevant
+`pageInfo.hasNextPage` value is false.
 
 Filter to unresolved threads where the relevant review comment is from
 `copilot-pull-request-reviewer`. Keep human review comments separate and do not
