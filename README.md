@@ -9,14 +9,14 @@ Each skill lives in its own top-level folder with a `SKILL.md` file so the
 Install a specific skill from this repository with:
 
 ```bash
-npx skills add https://github.com/NerdOutInc/ai-skills --skill screen-studio
+npx skills add https://github.com/NerdOutInc/ai-skills --skill address-copilot-comments
 ```
 
 The installer will prompt for the install scope and target agent. To install
 globally without prompts, add `--global --yes`:
 
 ```bash
-npx skills add https://github.com/NerdOutInc/ai-skills --skill screen-studio --global --yes
+npx skills add https://github.com/NerdOutInc/ai-skills --skill address-copilot-comments --global --yes
 ```
 
 To list the available skills before installing:
@@ -27,9 +27,19 @@ npx skills add https://github.com/NerdOutInc/ai-skills --list
 
 ## Available Skills
 
-The current skills in this repository are macOS-only. `screen-studio` depends
-on Screen Studio and macOS UI automation, while `edit-narrated-screencasts`
-uses Apple Vision for screencast screen analysis.
+These skills cover GitHub PR review loops and screencast production workflows.
+The screencast skills are macOS-only: `screen-studio` depends on Screen Studio
+and macOS UI automation, while `edit-narrated-screencasts` uses Apple Vision
+for screencast screen analysis.
+
+### [address-copilot-comments](address-copilot-comments/README.md)
+
+The `address-copilot-comments` skill helps agents triage and address GitHub
+Copilot pull request review comments. It guides thread-aware review inspection,
+comment classification, hands-on or autonomous fix planning, scoped
+implementation, separate review-fix commits, thread resolution, Copilot
+re-review requests, and repeat review loops until no meaningful Copilot
+comments remain.
 
 ### [edit-narrated-screencasts](edit-narrated-screencasts/README.md)
 
