@@ -111,7 +111,9 @@ These ship inside the skill directory and don't require a separate install:
 - `scripts/prepare_timing_analysis.py` - default pre-edit analysis entrypoint;
   probes media, transcribes narration, runs Apple Vision screen analysis, and
   writes `media-summary.json`, `transcript.json`, `screen-events.json`,
-  `screen-events-contact-sheet.jpg`, `timing-map.md`, and `timing-map.json`.
+  `timing-map.md`, and `timing-map.json`. It also writes the best-effort
+  `screen-events-contact-sheet.jpg` when usable frame-backed screen events are
+  available and warns when the sheet is absent.
 - `scripts/probe_media.py` - summarizes source video/audio metadata with
   `ffprobe`.
 - `scripts/transcribe_narration.py` - transcribes narration audio with local

@@ -42,8 +42,10 @@ Follow each phase in order.
    - Pass `--no-install` in locked-down environments or when dependencies must
      be preinstalled manually.
    - The helper writes `media-summary.json`, `transcript.json`,
-     `screen-events.json`, `screen-events-contact-sheet.jpg`, `timing-map.md`,
-     and `timing-map.json` in the output directory.
+     `screen-events.json`, `timing-map.md`, and `timing-map.json` in the output
+     directory. It also writes `screen-events-contact-sheet.jpg` when usable
+     frame-backed screen events are available; if the sheet is absent, the
+     orchestrator warns and you must verify screen events from the frame paths.
    - Treat `timing-map.md` and `timing-map.json` as evidence scaffolds, not a
      render spec and not final alignment.
 
@@ -52,7 +54,8 @@ Follow each phase in order.
      rate, codec, bitrate, audio duration, and whether the source has embedded
      audio.
    - Use `transcript.json` segments as narration beats.
-   - Use `screen-events.json` and the contact sheet as screen evidence:
+   - Use `screen-events.json` and the contact sheet, when present, as screen
+     evidence:
      `scene_change` marks action/page/modal boundaries, `ocr_change` confirms
      visible text or state changes, `stable_hold` suggests waits/trims/speed-up
      or freeze-frame candidates, and `anchor` frames provide regular visual
@@ -145,7 +148,8 @@ Follow each phase in order.
   whisper.cpp and write normalized `transcript.json`. Normally invoked by
   `prepare_timing_analysis.py`.
 - `scripts/analyze_screen_events.py`: sample the source video, run Apple Vision
-  screen analysis, and write `screen-events.json` plus a contact sheet.
+  screen analysis, write `screen-events.json`, and write a best-effort contact
+  sheet when frame-backed events are available.
   Normally invoked by `prepare_timing_analysis.py`.
 - `scripts/vision_frame_analysis.swift`: Apple Vision OCR and feature-print
   analysis for sampled frames.

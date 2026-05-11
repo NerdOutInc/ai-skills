@@ -40,14 +40,18 @@ existing analysis directory. Use `--no-install` in locked-down environments. On
 macOS with Homebrew, the helper may install `ffmpeg` and `whisper-cpp` and
 download `$HOME/.cache/whisper.cpp/ggml-base.en.bin`.
 
-The analysis directory should contain:
+The analysis directory should contain these required artifacts:
 
 - `media-summary.json`
 - `transcript.json`
 - `screen-events.json`
-- `screen-events-contact-sheet.jpg`
 - `timing-map.md`
 - `timing-map.json`
+
+It may also contain `screen-events-contact-sheet.jpg`. The contact sheet is a
+best-effort review aid generated when screen analysis has usable frame-backed
+events; `prepare_timing_analysis.py` warns when it is absent, and the agent must
+then verify screen events from the frame paths in `screen-events.json`.
 
 Use lower-level helpers such as `transcribe_narration.py` and
 `analyze_screen_events.py` directly only when you need to debug or regenerate
