@@ -333,6 +333,7 @@ def normalize_transcript(
     duration: float | None,
     language: str,
     model: Path,
+    whisper_cli: str,
     raw_prefix: Path,
     normalized_path: Path,
 ) -> dict[str, Any]:
@@ -353,6 +354,7 @@ def normalize_transcript(
         "language": language,
         "engine": "whisper.cpp",
         "model": str(model),
+        "whisper_cli": whisper_cli,
         "raw_outputs": {
             "text": str(raw_txt),
             "srt": str(raw_srt),
@@ -425,6 +427,7 @@ def transcribe(args: argparse.Namespace) -> Path:
         duration=duration,
         language=args.language,
         model=model,
+        whisper_cli=whisper_cli,
         raw_prefix=raw_prefix,
         normalized_path=normalized_path,
     )

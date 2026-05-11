@@ -22,6 +22,37 @@ SCHEMA = "nerdout.timing_map.v1"
 MEDIA_SCHEMA = "nerdout.media_summary.v1"
 TRANSCRIPT_SCHEMA = "nerdout.transcript.v1"
 SCREEN_EVENTS_SCHEMA = "nerdout.screen_events.v1"
+DEFAULT_TRANSCRIPT_MODEL = Path.home() / ".cache" / "whisper.cpp" / "ggml-base.en.bin"
+SCREEN_ANALYSIS_DEFAULTS: dict[str, str | int | float] = {
+    "scan_interval": 1.0,
+    "vision_interval": 5.0,
+    "refine_window": 1.5,
+    "refine_step": 0.5,
+    "min_hold_duration": 4.0,
+    "min_event_gap": 1.5,
+    "max_vision_frames": 180,
+    "ocr_level": "fast",
+    "scan_width": 320,
+    "vision_width": 1920,
+    "sheet_width": 480,
+    "cols": 3,
+    "ocr_change_threshold": 0.70,
+}
+SCREEN_ANALYSIS_FLAGS = [
+    ("--scan-interval", "scan_interval"),
+    ("--vision-interval", "vision_interval"),
+    ("--refine-window", "refine_window"),
+    ("--refine-step", "refine_step"),
+    ("--min-hold-duration", "min_hold_duration"),
+    ("--min-event-gap", "min_event_gap"),
+    ("--max-vision-frames", "max_vision_frames"),
+    ("--ocr-level", "ocr_level"),
+    ("--scan-width", "scan_width"),
+    ("--vision-width", "vision_width"),
+    ("--sheet-width", "sheet_width"),
+    ("--cols", "cols"),
+    ("--ocr-change-threshold", "ocr_change_threshold"),
+]
 NEARBY_EVENT_WINDOW_SECONDS = 6.0
 LIKELY_RANGE_PADDING_SECONDS = 2.0
 MAX_CANDIDATES_PER_ROW = 4
@@ -236,6 +267,81 @@ def validate_artifact_data(
         raise SystemExit(f"{label} was created for {data.get(source_key)!r}, not {str(expected_source)!r}.")
 
 
+def path_or_text_match(actual: Any, expected: Any) -> bool:
+    if not isinstance(actual, str) or not actual:
+        return False
+    expected_text = str(expected)
+    actual_expanded = str(Path(actual).expanduser())
+    expected_expanded = str(Path(expected_text).expanduser())
+    if actual_expanded == expected_expanded:
+        return True
+    try:
+        return Path(actual).expanduser().resolve() == Path(expected_text).expanduser().resolve()
+    except OSError:
+        return actual_expanded == expected_expanded
+
+
+def setting_matches(actual: Any, expected: Any, *, path_like: bool) -> bool:
+    if path_like:
+        return path_or_text_match(actual, expected)
+    if isinstance(expected, float):
+        try:
+            actual_float = float(actual)
+        except (TypeError, ValueError):
+            return False
+        return math.isclose(actual_float, expected, rel_tol=0.0, abs_tol=1e-9)
+    return actual == expected
+
+
+def setting_mismatches(
+    data: dict[str, Any],
+    *,
+    expected_settings: dict[str, Any],
+    label: str,
+    container_key: str | None = None,
+    path_like_keys: set[str] | None = None,
+) -> list[str]:
+    if not expected_settings:
+        return []
+    path_like_keys = path_like_keys or set()
+    actual_settings: dict[str, Any]
+    prefix = ""
+    if container_key:
+        raw_settings = data.get(container_key)
+        if not isinstance(raw_settings, dict):
+            return [f"{container_key} is missing"]
+        actual_settings = raw_settings
+        prefix = f"{container_key}."
+    else:
+        actual_settings = data
+
+    mismatches = []
+    for key, expected in expected_settings.items():
+        actual = actual_settings.get(key)
+        if not setting_matches(actual, expected, path_like=key in path_like_keys):
+            mismatches.append(f"{prefix}{key} is {actual!r}, expected {expected!r}")
+    return mismatches
+
+
+def validate_artifact_settings(
+    data: dict[str, Any],
+    *,
+    label: str,
+    expected_settings: dict[str, Any],
+    container_key: str | None = None,
+    path_like_keys: set[str] | None = None,
+) -> None:
+    mismatches = setting_mismatches(
+        data,
+        expected_settings=expected_settings,
+        label=label,
+        container_key=container_key,
+        path_like_keys=path_like_keys,
+    )
+    if mismatches:
+        raise SystemExit(f"{label} settings do not match this run: {'; '.join(mismatches)}")
+
+
 def cached_artifact(
     *,
     path: Path,
@@ -244,6 +350,9 @@ def cached_artifact(
     source_key: str,
     expected_source: Path,
     force: bool,
+    expected_settings: dict[str, Any] | None = None,
+    settings_container: str | None = None,
+    path_like_settings: set[str] | None = None,
 ) -> dict[str, Any] | None:
     if force or not path.exists():
         return None
@@ -263,6 +372,16 @@ def cached_artifact(
         raise SystemExit(
             f"Existing {label} does not match this run. Rerun with --force to regenerate it.\n{exc}"
         ) from exc
+    mismatches = setting_mismatches(
+        data,
+        expected_settings=expected_settings or {},
+        label=label,
+        container_key=settings_container,
+        path_like_keys=path_like_settings,
+    )
+    if mismatches:
+        eprint(f"Skipping cached {label}; settings changed: {'; '.join(mismatches)}")
+        return None
     eprint(f"Reusing existing {label}: {path}")
     return data
 
@@ -381,8 +500,46 @@ def write_media_summary(script: Path, video: Path, audio: Path, output: Path) ->
     return summary
 
 
+def effective_transcript_model(args: argparse.Namespace) -> Path:
+    if args.model:
+        return args.model.expanduser()
+    return DEFAULT_TRANSCRIPT_MODEL
+
+
+def effective_whisper_cli_override(value: str | None) -> str | None:
+    if not value:
+        return None
+    override_path = Path(value).expanduser()
+    if override_path.exists():
+        return str(override_path)
+    found = shutil.which(value)
+    if found:
+        return found
+    return str(override_path)
+
+
+def transcript_settings(args: argparse.Namespace) -> dict[str, Any]:
+    settings: dict[str, Any] = {
+        "language": args.language,
+        "model": str(effective_transcript_model(args)),
+    }
+    whisper_cli = effective_whisper_cli_override(args.whisper_cli)
+    if whisper_cli:
+        settings["whisper_cli"] = whisper_cli
+    return settings
+
+
+def screen_analysis_settings(args: argparse.Namespace) -> dict[str, str | int | float]:
+    settings: dict[str, str | int | float] = {}
+    for key, default in SCREEN_ANALYSIS_DEFAULTS.items():
+        value = getattr(args, key)
+        settings[key] = default if value is None else value
+    return settings
+
+
 def transcribe(args: argparse.Namespace, script: Path, audio: Path, out_dir: Path) -> dict[str, Any]:
     transcript_path = out_dir / "transcript.json"
+    expected_settings = transcript_settings(args)
     cached = cached_artifact(
         path=transcript_path,
         label="transcript.json",
@@ -390,6 +547,8 @@ def transcribe(args: argparse.Namespace, script: Path, audio: Path, out_dir: Pat
         source_key="source_audio",
         expected_source=audio,
         force=args.force,
+        expected_settings=expected_settings,
+        path_like_settings={"model", "whisper_cli"},
     )
     if cached is not None:
         return cached
@@ -410,11 +569,18 @@ def transcribe(args: argparse.Namespace, script: Path, audio: Path, out_dir: Pat
         source_key="source_audio",
         expected_source=audio,
     )
+    validate_artifact_settings(
+        data,
+        label="transcript.json",
+        expected_settings=expected_settings,
+        path_like_keys={"model", "whisper_cli"},
+    )
     return data
 
 
 def analyze_screen(args: argparse.Namespace, script: Path, video: Path, out_dir: Path) -> dict[str, Any]:
     screen_events_path = out_dir / "screen-events.json"
+    expected_settings = screen_analysis_settings(args)
     cached = cached_artifact(
         path=screen_events_path,
         label="screen-events.json",
@@ -422,24 +588,15 @@ def analyze_screen(args: argparse.Namespace, script: Path, video: Path, out_dir:
         source_key="source_video",
         expected_source=video,
         force=args.force,
+        expected_settings=expected_settings,
+        settings_container="analysis",
     )
     if cached is not None:
         return cached
 
     cmd: list[str | Path] = [sys.executable, script, "--video", video, "--out", out_dir]
-    passthrough = [
-        ("--scan-interval", args.scan_interval),
-        ("--vision-interval", args.vision_interval),
-        ("--refine-window", args.refine_window),
-        ("--refine-step", args.refine_step),
-        ("--min-hold-duration", args.min_hold_duration),
-        ("--min-event-gap", args.min_event_gap),
-        ("--max-vision-frames", args.max_vision_frames),
-        ("--ocr-level", args.ocr_level),
-    ]
-    for flag, value in passthrough:
-        if value is not None:
-            cmd.extend([flag, str(value)])
+    for flag, key in SCREEN_ANALYSIS_FLAGS:
+        cmd.extend([flag, str(expected_settings[key])])
     if args.no_install:
         cmd.append("--no-install")
     run(cmd)
@@ -450,6 +607,12 @@ def analyze_screen(args: argparse.Namespace, script: Path, video: Path, out_dir:
         schema=SCREEN_EVENTS_SCHEMA,
         source_key="source_video",
         expected_source=video,
+    )
+    validate_artifact_settings(
+        data,
+        label="screen-events.json",
+        expected_settings=expected_settings,
+        container_key="analysis",
     )
     return data
 
@@ -900,6 +1063,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-event-gap", type=positive_float)
     parser.add_argument("--max-vision-frames", type=positive_int)
     parser.add_argument("--ocr-level", choices=("fast", "accurate"))
+    parser.add_argument("--scan-width", type=positive_int)
+    parser.add_argument("--vision-width", type=positive_int)
+    parser.add_argument("--sheet-width", type=positive_int)
+    parser.add_argument("--cols", type=positive_int)
+    parser.add_argument("--ocr-change-threshold", type=positive_float)
     return parser.parse_args()
 
 
