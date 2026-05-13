@@ -107,6 +107,55 @@ Create a simple table with these columns:
 - Source time range.
 - Edit operation.
 
+### Action/Narration Anchoring
+
+When mapping a source-video action to a narration cue, anchor to the exact
+spoken phrase that introduces the action. Do not use the transcript segment
+start as the cue when the phrase appears later in the segment; Whisper segment
+boundaries are only rough narration spans and can be several seconds early for a
+specific click, scroll, or typing run.
+
+Treat the first meaningful click or keystroke as the calibration anchor for the
+whole edit. If the first action is early, fix that before judging later actions.
+A bad first anchor can make the whole preview feel slightly ahead of the audio,
+even when later mismatches are smaller.
+
+The phrase onset is the earliest acceptable time for visible motion. A click,
+scroll, typing run, app switch, or page transition that appears before the
+phrase that introduces it will usually feel like the video is ahead of the
+audio. By default, start visible action about 0.3-0.8 seconds after the phrase
+begins, then verify with real playback.
+
+Use freeze frames to create that delay. Hold the stable frame immediately before
+the cursor moves, the page scrolls, or typing begins, then let the recorded
+action play at normal speed. If the narration still needs more room after the
+action completes, hold a stable frame after the action. Do not slow cursor
+movement, scrolling, or typing to fill time; slowed input motion looks wrong
+even when the endpoint lands near the narration.
+
+Pick freeze frames that look intentional. Avoid frames with the cursor
+mid-motion, a page mid-scroll, a transient hover state, or a distracting cursor
+over the content unless that cursor position is part of the demonstration. When
+the whole preview feels slightly ahead of the audio, first add or extend a
+freeze before the first meaningful action, then re-audit representative later
+actions against their exact phrase onsets. Do not shift narration or stretch
+visible motion to compensate.
+
+Before each preview, build an action/cue ledger for at least the first
+meaningful action and several later representative actions:
+
+- Cue phrase.
+- Verified phrase onset in the output audio.
+- Matching visual action start in the output video.
+- Lead/lag, with negative values meaning the video is early.
+- Edit operation that creates any needed delay.
+
+If transcript timing is uncertain, verify the phrase onset from the audio by
+playback, waveform inspection, or short audio snippets before rendering. For
+review contact sheets, include frames around important cue onsets, such as
+`cue - 0.5s`, `cue`, `cue + 0.5s`, and `cue + 1.0s`, so early actions are easy
+to spot.
+
 Use `screen-events.json` to choose candidate source ranges:
 
 - `scene_change` marks likely action/page/modal boundaries.

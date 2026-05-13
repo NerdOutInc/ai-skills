@@ -13,15 +13,16 @@ description: >
 
 ## Scope
 
-**Recording tool and capture mode.** Use Screen Studio for recording. This skill records the full display only. Do
-not offer or use window capture or selected-area capture. Do not export, trim,
-upload, or edit the video yourself unless the user explicitly asks. (The user
-may trim or retime footage in post-production on their own.)
+**Recording tool and capture mode.** Use Screen Studio for recording. This
+skill records the full display only. Do not offer or use window capture or
+selected-area capture. Do not export, trim, upload, or edit the video yourself
+unless the user explicitly asks. (The user may trim or retime footage in
+post-production on their own.)
 
-**Automation boundaries.** Use desktop automation for Screen Studio, Helium, and the target app. Computer
-Use is acceptable for inspection and off-camera setup, but do not use Computer
-Use to start or stop Screen Studio for a keeper take. Its cursor overlay can
-appear in the captured screen.
+**Automation boundaries.** Use desktop automation for Screen Studio, Helium,
+and the target app. Computer Use is acceptable for inspection and off-camera
+setup, but do not use Computer Use to start or stop Screen Studio for a keeper
+take. Its cursor overlay can appear in the captured screen.
 
 Browser automation (DOM clicks, invisible scripting) is acceptable for
 off-camera setup or verification inside a page, but must not be used for
@@ -29,15 +30,43 @@ keeper-take interactions unless the user explicitly wants an automated-looking
 capture. The actual screencast should be captured from the visible app or
 Helium window.
 
-**Timing.** Audio timing is not required. Treat audio duration as a guide to the expected
-story beats. The recording just needs to capture each required action clearly.
-If the UI needs time to load, index, upload, or respond, wait. Post-production
-timing adjustments are the user's responsibility.
+**Timing.** Audio timing is not required. Treat audio duration as a guide to
+the expected story beats. The recording just needs to capture each required
+action clearly. If the UI needs time to load, index, upload, or respond, wait.
+Post-production timing adjustments are the user's responsibility.
+
+## Activation Prompt
+
+At the start of every screen-studio task, before status-server setup, dry runs,
+or recording preparation, resolve the title-card mode. Use the app-native
+multiple-choice prompt when the host app supports it. Ask one question:
+
+```text
+Generate title cards?
+```
+
+Offer these options exactly:
+
+1. Generate intro and outro title cards
+2. Generate intro title card only
+3. Generate outro title card only
+4. Don't generate title cards
+
+If the host app does not expose an app-native multiple-choice control, ask the
+same question in chat with the same numbered choices and wait for the answer.
+If the user already made one of these choices explicitly in the request, record
+that choice and do not prompt again.
+
+This choice controls project-specific still-card asset generation for the
+downstream edit. It does not change the Screen Studio capture scope, and it
+does not grant permission to export, trim, or edit the video unless the user
+asks for those steps separately. Save the selected mode in the actions file.
 
 ## Hard Gates
 
 These requirements are not optional for keeper takes:
 
+- Resolve and record the title-card mode before recording setup.
 - Validate the full interaction sequence with at least two dry runs without recording.
 - Do not resize or reposition the target window during recording setup.
 - Verify logged-in browser flows immediately before recording.
@@ -85,6 +114,34 @@ pass `--port N` to change it. If `--agent` is omitted, the page falls back to
 the literal string "the agent" — this is the giveaway that the flag was
 forgotten on startup.
 
+### Reusing the server and PIN
+
+For back-to-back recordings, prefer keeping the existing status server alive
+when the user is already watching it from another device. This avoids forcing
+the user to scan another QR code between takes. Before starting a new server,
+check whether the old one is still listening:
+
+```bash
+lsof -nP -iTCP:8765 -sTCP:LISTEN
+curl -s http://127.0.0.1:8765/api/lan
+```
+
+If the server is still running and the user asks to reuse it, keep using that
+server and push a fresh `phase=preparing` update for the new recording. You do
+not need to reshare the QR code unless the user asks.
+
+If the server must be restarted but the user wants to keep the same PIN, start
+it with an explicit `--pin`:
+
+```bash
+"$SKILL_DIR/server/status-server" --port 8765 --pin 4827 --agent Codex &
+```
+
+The `--pin` flag belongs only to the server startup command. Do **not** pass
+`--pin` to `status-server update`; update calls use localhost and bypass
+browser PIN auth. At handoff, explicitly tell the user whether the status
+server was stopped or left running for the next recording.
+
 On startup the server prints a banner block to stdout containing:
 
 - A randomly-generated **4-digit PIN** (different every run; required to
@@ -123,9 +180,13 @@ On startup the server prints a banner block to stdout containing:
    edges by scaling the QR with nearest-neighbor filtering:
 
    ```bash
+   FILTER='[0:v]scale=840:840:flags=neighbor[qr]'
+   FILTER="${FILTER};color=white:s=1600x900[bg]"
+   FILTER="${FILTER};[bg][qr]overlay=(W-w)/2:(H-h)/2"
+
    ffmpeg -y \
      -i "$QR_PATH" \
-     -filter_complex "[0:v]scale=840:840:flags=neighbor[qr];color=white:s=1600x900[bg];[bg][qr]overlay=(W-w)/2:(H-h)/2" \
+     -filter_complex "$FILTER" \
      -frames:v 1 \
      /tmp/screen-studio-status-qr-card.png
    ```
@@ -305,11 +366,21 @@ heartbeat update to flush the note channel.
   each meaningful verification step and each finding, e.g.:
 
   ```bash
-  status-server update --phase stopped --action "Measuring display-track duration"
-  status-server update --phase stopped --action "Generating timestamp contact sheet"
-  status-server update --phase stopped --action "Inspecting frame 0:45 for search result state"
-  status-server update --phase stopped --action "Checking final frame for expected hold"
-  status-server update --phase stopped --action "Frame review passed; take looks like a keeper"
+  status-server update \
+    --phase stopped \
+    --action "Measuring display-track duration"
+  status-server update \
+    --phase stopped \
+    --action "Generating timestamp contact sheet"
+  status-server update \
+    --phase stopped \
+    --action "Inspecting frame 0:45 for search result state"
+  status-server update \
+    --phase stopped \
+    --action "Checking final frame for expected hold"
+  status-server update \
+    --phase stopped \
+    --action "Frame review passed; take looks like a keeper"
   ```
 
   The final status update before stopping the server must be the verdict:
@@ -436,6 +507,7 @@ in locked-down environments or when dependencies must be preinstalled manually.
 
 Create or update the actions file with:
 
+- Selected title-card mode, and paths to generated intro/outro stills if any.
 - Audio path, duration, and transcript cues from `transcript.json`.
 - Planned screen actions and expected visible states.
 - Setup and reset steps.
@@ -519,8 +591,8 @@ Keeper takes should move the actual macOS pointer at a human pace.
   Example output:
 
   ```text
-  text        screenshot_x  screenshot_y  screenshot_w  screenshot_h  center_x  center_y  cliclick_x  cliclick_y  confidence
-  Workflows   448           1213          149           26            523       1226      261         613         1.000
+  text       center_x  center_y  cliclick_x  cliclick_y  confidence
+  Workflows  523       1226      261         613         1.000
   ```
 
   Click the `cliclick_x,cliclick_y` value, then take another screenshot to
@@ -575,6 +647,12 @@ When showing a list, grid, or search result set, add a human-looking scroll.
 Validate the scroll during dry runs.
 
 - Focus a safe blank area inside the scrollable app first.
+- For scroll-only captures on account, billing, provisioning, settings, or
+  form-heavy pages, move the cursor over the scrollable region without
+  clicking. Prefer `cliclick m:x,y` plus wheel/trackpad events. Only use a
+  focus click (`c:.`) after a dry run proves the target is inert and cannot
+  select an option, change account state, submit, provision, purchase, or
+  otherwise alter user data.
 - Avoid browser borders, desktop edges, sticky footers, and app chrome.
 - Prefer real scroll-wheel/trackpad-style events over keyboard scrolling.
 - Prefer small repeated scroll increments over one large jump.
@@ -744,6 +822,10 @@ After stopping:
   generation, after the sheet path is known, and while inspecting frames. If
   you open or extract focused frames from a timestamp, push an update with the
   timestamp and what you are checking.
+- If the display track is unexpectedly long, inspect the contact sheet before
+  deciding. A long take can still be a keeper when the requested visible
+  sequence is complete, clean, and free of harmful actions; note the extra
+  duration in the actions file so the editor has context.
 - Reject the take if sampled frames show missing actions, wrong state, Codex,
   stale Screen Studio windows, wrong query text, address-bar suggestions,
   failed saves, missing connectors, or an incorrect final hold.
@@ -802,6 +884,7 @@ ffmpeg \
 Keep a compact log while rehearsing and recording:
 
 - Capture scope: full display.
+- Title-card mode and any generated still-card paths.
 - Window state: display, size, position, and coordinate validation.
 - Starting state: app, URL or file, selected data, and visible panel.
 - Rehearsal issues found and cleared.
@@ -813,8 +896,14 @@ Keep a compact log while rehearsing and recording:
 ## Recovery
 
 - If a take is rejected after frame review, push `phase=error` to the status
-  server with a short reason
-  (`status-server update --phase error --action "Rejected: Codex visible in frame 90"`).
+  server with a short reason:
+
+  ```bash
+  status-server update \
+    --phase error \
+    --action "Rejected: Codex visible in frame 90"
+  ```
+
 - If Screen Studio or macOS asks for recording, microphone, camera, or
   accessibility permission, stop and ask the user to grant it.
 - If the wrong display is selected, cancel before recording and reselect the
