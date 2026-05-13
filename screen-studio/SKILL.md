@@ -591,8 +591,8 @@ Keeper takes should move the actual macOS pointer at a human pace.
   Example output:
 
   ```text
-  text       center_x  center_y  cliclick_x  cliclick_y  confidence
-  Workflows  523       1226      261         613         1.000
+  text       screenshot_x  screenshot_y  screenshot_w  screenshot_h  center_x  center_y  cliclick_x  cliclick_y  confidence
+  Workflows  474           1208          98            36            523       1226      261         613         1.000
   ```
 
   Click the `cliclick_x,cliclick_y` value, then take another screenshot to
