@@ -69,20 +69,42 @@ Follow each phase in order.
 
 ### Phase 2 — Edit
 
-3. Turn the generated timing map into a checked edit map.
+1. Turn the generated timing map into a checked edit map.
    - Start from `timing-map.md` or `timing-map.json`; do not treat it as a
      finished edit decision.
    - Mark narration beats and the matching screen actions.
+   - Anchor actions to the exact spoken phrase, not just the transcript segment
+     start. Whisper segment starts are often several seconds before the phrase
+     that names the action. If a cue phrase sits inside a longer transcript
+     segment, estimate or verify the phrase onset from the audio before placing
+     the matching click, scroll, typing run, or app switch.
+   - Treat the first meaningful click or keystroke as the calibration anchor
+     for the whole edit. If that first action is early, fix it before judging
+     later timings; a bad first anchor can make every following action feel
+     slightly ahead even when the later offsets are smaller.
+   - Bias visible actions after the narration cue. A click, scroll, typing run,
+     or page transition that starts before the relevant spoken phrase usually
+     feels early; aim for the action to begin about 0.3-0.8 seconds after the
+     phrase begins unless the narration clearly refers to something already
+     visible.
+   - Preserve real-time visible motion. Do not stretch cursor movement,
+     scrolling, or typing to fill narration time. Instead, freeze a stable frame
+     immediately before the movement, let the movement happen at normal speed,
+     then hold again if more narration time is needed.
    - Use screen-event candidates to identify likely source-video action
      boundaries, loading waits, state changes, and freeze-frame candidates.
    - If narration and screen actions do not align, notify the user and suggest
      adjustments to either the narration or the video.
    - Identify long waits that can be sped up, actions that need more breathing
      room, and places where a freeze frame communicates better than raw waiting.
+   - Choose freeze frames from stable, intentional-looking moments. Avoid
+     freezing mid-cursor move, mid-scroll, on a transient hover, or with the
+     cursor distracting from the narrated point unless the cursor position is
+     itself part of the instruction.
    - Keep a simple table of source time, output time, action, narration cue,
      and edit operation.
 
-4. Create supporting stills.
+2. Create supporting stills.
    - If the user asks for intro/outro stills, treat them as project-specific
      still assets. Use supplied artwork, inspect the user's actual brand/source
      files, or create one-off images in the requested output directory. Do not
@@ -94,19 +116,24 @@ Follow each phase in order.
 
 ### Phase 3 — Render
 
-5. Render a preview first.
+1. Render a preview first.
+   - Before rendering, audit the action/cue ledger. For the first meaningful
+     action and several later representative actions, record the cue phrase,
+     phrase onset, visual action start, and lead/lag. Do not render while
+     important actions are early unless the narration intentionally trails an
+     already-visible state.
    - Use `scripts/render_screencast.py --profile preview`.
    - Share the preview path and ask the user to review timing, text, fades, and
      patched areas.
    - Expect several rounds of small timing/design adjustments.
 
-6. Render HQ after approval.
+2. Render HQ after approval.
    - Use `scripts/render_screencast.py --profile hq`.
    - Prefer H.264, `-preset slow`, `-crf 18`, original FPS, `yuv420p`, and audio
      stream copy when the audio is already AAC (m4a/MP4-compatible).
    - Use `-movflags +faststart` for shareable MP4 output.
 
-7. Verify the final.
+3. Verify the final.
    - Probe the final file.
    - Generate a contact sheet around intros, fades, patches, important actions,
      and the outro.
@@ -126,6 +153,14 @@ Follow each phase in order.
   explainable and recoverable.
 - If replacing a visual artifact with a static patch, verify alignment at the
   first, middle, and last affected timestamps.
+- Never use a transcript segment start as an action cue when the relevant
+  spoken phrase begins later in that segment. Use the phrase onset.
+- If the user says the whole preview feels ahead of the audio, first check the
+  first meaningful action. Add or extend freeze time before that action, then
+  re-audit representative later actions against their exact phrase onsets.
+- Do not slow visible cursor movement, page scrolling, or typing to make
+  narration timing fit. Add or extend freeze frames before or after the action
+  so the action itself stays natural.
 - Confirm the narration's leading silence matches `intro.duration -
   intro.fade_duration`. The narration plays from output time `0`, so if the
   intro card is 4s with a 1s fade, the m4a should start with ~3s of silence.
